@@ -11,6 +11,9 @@ CHUNKS_PATH = DATA_DIR / "chunks.jsonl"
 SYNONYMS_PATH = DATA_DIR / "synonyms.json"
 SOURCES_PATH = DATA_DIR / "sources.json"
 VEHICLE_PATH = DATA_DIR / "vehicle.json"
+# Иллюстрации лежат внутри скилла: без них он не может показать схему,
+# а пересказ электросхемы словами бесполезен.
+IMAGES_DIR = SKILL_ROOT / "assets" / "wiring"
 # Исходники (PDF/JPG) в git не хранятся — их восстанавливает scripts/drive_import.py
 CORPUS_DIR = SKILL_ROOT.parents[2] / "corpus"
 
@@ -66,6 +69,15 @@ def _span(start, end, prefix: str) -> str | None:
     if end is None or str(end) == str(start):
         return f"{prefix} {start}"
     return f"{prefix} {start}-{end}"
+
+
+def image_path(chunk: dict) -> Path | None:
+    """Путь к иллюстрации фрагмента, если файл на месте."""
+    name = chunk.get("image")
+    if not name:
+        return None
+    path = IMAGES_DIR / name
+    return path if path.exists() else None
 
 
 def citation(chunk: dict) -> str:

@@ -22,7 +22,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from ragkit.applicability import check as check_applicability
 from ragkit.applicability import restrict as restrict_to_applicable
 from ragkit.bm25 import Bm25Index
-from ragkit.store import citation, load_chunks, load_sources, load_synonyms, load_vehicle
+from ragkit.store import (
+    citation,
+    image_path,
+    load_chunks,
+    load_sources,
+    load_synonyms,
+    load_vehicle,
+)
 
 SNIPPET_WIDTH = 96
 
@@ -38,7 +45,11 @@ def render(hit, index: int, *, full: bool) -> str:
     meta = f"    id={chunk['id']}  score={hit.score:.2f}"
     if chunk.get("section_inherited"):
         meta += "  (раздел определён по соседней странице)"
-    if chunk.get("drive_url"):
+    picture = image_path(chunk)
+    if picture:
+        # Схему нужно показывать, а не пересказывать: путь готов для Read.
+        meta += f"\n    файл: {picture}"
+    elif chunk.get("drive_url"):
         meta += f"\n    {chunk['drive_url']}"
     return f"{header}\n{meta}\n{body}"
 

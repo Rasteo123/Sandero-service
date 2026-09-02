@@ -19,7 +19,7 @@ from ragkit.applicability import check as check_applicability
 from ragkit.applicability import engines_in_text, restrict
 from ragkit.bm25 import Bm25Index
 from ragkit.chunker import chunk_page, chunk_unit, parse_page, parse_service_page, section_key
-from ragkit.store import citation, load_chunks, load_synonyms, load_vehicle
+from ragkit.store import citation, image_path, load_chunks, load_synonyms, load_vehicle
 from ragkit.textnorm import stem, tokenize, trigrams
 
 
@@ -274,6 +274,13 @@ class TestCorpus(unittest.TestCase):
         self.assertGreater(len(multi), 100)
         without_title = [c["id"] for c in multi if not c.get("section")]
         self.assertLess(len(without_title) / len(multi), 0.05, without_title[:5])
+
+    def test_every_illustration_ships_with_the_skill(self):
+        """Скилл должен уметь показать схему, а не только сослаться на неё."""
+        images = [c for c in self.chunks if c.get("image")]
+        self.assertGreaterEqual(len({c["image"] for c in images}), 22)
+        missing = sorted({c["image"] for c in images if image_path(c) is None})
+        self.assertEqual(missing, [], f"нет файлов иллюстраций: {missing}")
 
     def test_engine_specific_diagrams_are_tagged(self):
         """Схемы 8V и 16V — это K7M и K4M: без метки поиск смешал бы их."""
