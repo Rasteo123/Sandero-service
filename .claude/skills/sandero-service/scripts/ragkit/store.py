@@ -10,6 +10,7 @@ DATA_DIR = SKILL_ROOT / "data"
 CHUNKS_PATH = DATA_DIR / "chunks.jsonl"
 SYNONYMS_PATH = DATA_DIR / "synonyms.json"
 SOURCES_PATH = DATA_DIR / "sources.json"
+VEHICLE_PATH = DATA_DIR / "vehicle.json"
 # Исходники (PDF/JPG) в git не хранятся — их восстанавливает scripts/drive_import.py
 CORPUS_DIR = SKILL_ROOT.parents[2] / "corpus"
 
@@ -32,6 +33,14 @@ def load_chunks(path: Path | None = None) -> list[dict]:
 
 def load_synonyms(path: Path | None = None) -> dict[str, list[str]]:
     path = path or SYNONYMS_PATH
+    if not path.exists():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def load_vehicle(path: Path | None = None) -> dict:
+    """Справочник применимости: какие двигатели покрывает каждый документ."""
+    path = path or VEHICLE_PATH
     if not path.exists():
         return {}
     return json.loads(path.read_text(encoding="utf-8"))

@@ -19,8 +19,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from ragkit.applicability import check as check_applicability
+from ragkit.applicability import restrict as restrict_to_applicable
 from ragkit.bm25 import Bm25Index
-from ragkit.store import citation, load_chunks, load_sources, load_synonyms
+from ragkit.store import citation, load_chunks, load_sources, load_synonyms, load_vehicle
 
 SNIPPET_WIDTH = 96
 
@@ -62,6 +64,14 @@ def main() -> int:
     parser.add_argument(
         "--per-doc", type=int, default=None, help="не более N фрагментов из одного документа"
     )
+    parser.add_argument(
+        "--engine", help="двигатель автомобиля (H4M, K4M, K7M, K9K, D4F): отсечь неприменимое"
+    )
+    parser.add_argument(
+        "--ignore-applicability",
+        action="store_true",
+        help="искать по всему корпусу, не проверяя применимость к двигателю",
+    )
     parser.add_argument("--full", action="store_true", help="показать фрагменты целиком")
     parser.add_argument("--json", action="store_true", help="машиночитаемый вывод")
     parser.add_argument("--list-sources", action="store_true", help="состав корпуса и что не вошло")
@@ -74,9 +84,14 @@ def main() -> int:
         for chunk in chunks:
             counts[chunk["doc"]] = counts.get(chunk["doc"], 0) + 1
         print(f"Автомобиль: {sources.get('vehicle', '—')}\n")
+        vehicle = load_vehicle()
+        coverage = vehicle.get("document_engines", {})
         for document in sources["documents"]:
             mark = "✓" if document.get("indexed") else "✗"
             print(f"{mark} {document['doc']:16} {document['title']}")
+            engines = coverage.get(document["doc"], {}).get("engines")
+            if engines:
+                print(f"    двигатели: {', '.join(engines)}")
             if document.get("indexed"):
                 print(f"    фрагментов в индексе: {counts.get(document['doc'], 0)}")
             else:
@@ -100,24 +115,50 @@ def main() -> int:
     if args.kind:
         where["kind"] = args.kind
 
+    vehicle = load_vehicle()
+    applicability = {"engine": None, "allowed": None, "blocked": [], "warnings": []}
+    if vehicle and not args.ignore_applicability:
+        profile = (vehicle.get("profile") or {}).get("engine")
+        applicability = check_applicability(
+            f"{query} {args.engine or ''}", vehicle, profile_engine=args.engine or profile
+        )
+        # Документ, не покрывающий названный двигатель, из выдачи убирается:
+        # красивая процедура от другого мотора хуже, чем её отсутствие.
+        where = restrict_to_applicable(where, applicability) or {}
+
     hits = index.search(query, top_k=args.top, where=where or None, per_doc=args.per_doc)
 
     if args.json:
         print(
             json.dumps(
-                [
-                    {"score": round(h.score, 4), "citation": citation(h.chunk), **h.chunk}
-                    for h in hits
-                ],
+                {
+                    "query": query,
+                    "applicability": applicability,
+                    "hits": [
+                        {"score": round(h.score, 4), "citation": citation(h.chunk), **h.chunk}
+                        for h in hits
+                    ],
+                },
                 ensure_ascii=False,
                 indent=2,
             )
         )
         return 0
 
+    for warning in applicability["warnings"]:
+        print(textwrap.fill(warning, SNIPPET_WIDTH, initial_indent="! ", subsequent_indent="  "))
+    if applicability["warnings"]:
+        print()
+
     if not hits:
         print(f"Ничего не найдено: {query!r}")
-        print("Попробуйте другие слова или снимите фильтры (--doc/--lang/--chapter).")
+        if applicability["blocked"]:
+            print(
+                "Применимых к этому двигателю документов в корпусе нет — "
+                "это ответ «данных нет», а не повод искать без --engine."
+            )
+        else:
+            print("Попробуйте другие слова или снимите фильтры (--doc/--lang/--chapter).")
         return 1
 
     print(f"Запрос: {query}   найдено фрагментов: {len(hits)}\n")

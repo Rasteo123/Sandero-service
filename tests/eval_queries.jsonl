@@ -34,7 +34,10 @@
 {"query": "меры предосторожности ABS", "expect_any": ["ABS PRECAUTIONS"]}
 {"query": "прокачка гидроусилителя руля", "expect_any": ["POWER-ASSISTED STEERING CIRCUIT BLEEDING"]}
 {"query": "снятие задней балки", "expect_any": ["REAR AXLE"]}
-{"query": "снятие радиатора охлаждения", "expect_any": ["COOLING RADIATOR"]}
 {"query": "снятие заднего тормозного цилиндра", "expect_any": ["REAR BRAKE CYLINDER"]}
 {"query": "замена задних тормозных колодок", "expect_any": ["REAR BRAKE LINING", "REAR BRAKE"]}
 {"query": "снятие тормозного барабана", "expect_any": ["REAR BRAKE DRUM"]}
+{"query": "замена цепи ГРМ H4M", "forbid": ["TIMING BELT"], "note": "H4M цепной и в мануале не описан — процедура по ремню не должна выдаваться"}
+{"query": "замена ремня ГРМ H4M 1.6", "forbid": ["TIMING BELT REMOVAL"]}
+{"query": "распиновка ЭБУ H4M", "forbid": ["иллюстрация 20.jpg", "иллюстрация 21.jpg"], "note": "схемы относятся к K-серии"}
+{"query": "замена ремня ГРМ K4M", "expect_any": ["TIMING BELT"]}

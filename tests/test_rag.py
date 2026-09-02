@@ -15,9 +15,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILL_SCRIPTS = REPO_ROOT / ".claude" / "skills" / "sandero-service" / "scripts"
 sys.path.insert(0, str(SKILL_SCRIPTS))
 
+from ragkit.applicability import check as check_applicability
+from ragkit.applicability import engines_in_text, restrict
 from ragkit.bm25 import Bm25Index
 from ragkit.chunker import chunk_page, chunk_unit, parse_page, parse_service_page, section_key
-from ragkit.store import citation, load_chunks, load_synonyms
+from ragkit.store import citation, load_chunks, load_synonyms, load_vehicle
 from ragkit.textnorm import stem, tokenize, trigrams
 
 
@@ -260,24 +262,81 @@ class TestCorpus(unittest.TestCase):
         self.assertGreater(max(pages), 3000, "нумерация должна быть сквозной по всему PDF")
 
 
+class TestApplicability(unittest.TestCase):
+    """Документ, не покрывающий названный двигатель, не должен попадать в ответ."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.vehicle = load_vehicle()
+
+    def test_vehicle_reference_is_present(self):
+        self.assertIn("engines", self.vehicle)
+        self.assertIn("document_engines", self.vehicle)
+
+    def test_engine_codes_are_recognised(self):
+        self.assertEqual(engines_in_text("замена цепи грм h4m 1.6"), ["H4M"])
+        self.assertEqual(engines_in_text("HR16DE"), ["H4M"], "ниссановское имя того же мотора")
+        self.assertEqual(engines_in_text("моменты затяжки"), [])
+
+    def test_service_manual_is_blocked_for_h4m(self):
+        result = check_applicability("замена цепи ГРМ H4M", self.vehicle)
+        self.assertEqual(result["engine"], "H4M")
+        self.assertIn("service_manual", result["blocked"])
+        self.assertIn("wiring", result["blocked"])
+        self.assertTrue(any("H4M" in w for w in result["warnings"]))
+
+    def test_service_manual_stays_for_covered_engine(self):
+        result = check_applicability("замена ремня ГРМ K4M", self.vehicle)
+        self.assertIn("service_manual", result["allowed"])
+        self.assertEqual(result["blocked"], [])
+
+    def test_wrong_timing_drive_is_called_out(self):
+        warnings = check_applicability("замена ремня ГРМ H4M", self.vehicle)["warnings"]
+        self.assertTrue(any("неприменим" in w for w in warnings))
+
+    def test_matching_timing_drive_is_not_an_alarm(self):
+        warnings = check_applicability("замена ремня ГРМ K4M", self.vehicle)["warnings"]
+        self.assertFalse([w for w in warnings if "ВНИМАНИЕ" in w])
+
+    def test_query_without_engine_restricts_nothing(self):
+        result = check_applicability("прокачка тормозной системы", self.vehicle)
+        self.assertIsNone(result["allowed"])
+        self.assertEqual(restrict({"lang": "ru"}, result), {"lang": "ru"})
+
+    def test_restrict_intersects_with_requested_doc(self):
+        result = check_applicability("цепь ГРМ H4M", self.vehicle)
+        self.assertEqual(restrict({"doc": "service_manual"}, result)["doc"], [])
+        self.assertIn("ru_owner", restrict(None, result)["doc"])
+
+
 class TestRetrievalQuality(unittest.TestCase):
     """Эвал: каждый запрос должен находить нужный раздел в топ-5."""
 
     @classmethod
     def setUpClass(cls):
         cls.index = Bm25Index(load_chunks(), load_synonyms())
+        cls.vehicle = load_vehicle()
         with (REPO_ROOT / "tests" / "eval_queries.jsonl").open(encoding="utf-8") as fh:
             cls.cases = [json.loads(line) for line in fh if line.strip()]
 
     def test_eval_set_is_meaningful(self):
-        self.assertGreaterEqual(len(self.cases), 30)
+        self.assertGreaterEqual(len(self.cases), 40)
+        queries = [case["query"] for case in self.cases]
+        self.assertEqual(len(queries), len(set(queries)), "дубли в эвале ничего не проверяют")
+        for case in self.cases:
+            self.assertTrue(case.get("expect_any") or case.get("forbid"), case["query"])
+
+    def _search(self, case):
+        """Ищет так же, как CLI: с проверкой применимости к двигателю."""
+        where = restrict(case.get("filters"), check_applicability(case["query"], self.vehicle))
+        return self.index.search(case["query"], top_k=case.get("top_k", 5), where=where)
 
     def test_every_query_hits_its_section(self):
         failures = []
         for case in self.cases:
-            hits = self.index.search(
-                case["query"], top_k=case.get("top_k", 5), where=case.get("filters")
-            )
+            if not case.get("expect_any"):
+                continue
+            hits = self._search(case)
             haystack = " || ".join(
                 citation(hit.chunk) + " " + hit.chunk["text"] for hit in hits
             ).lower()
@@ -286,6 +345,24 @@ class TestRetrievalQuality(unittest.TestCase):
                     f"{case['query']!r}: ждали {case['expect_any']}, "
                     f"получили {[citation(h.chunk) for h in hits]}"
                 )
+        self.assertEqual(failures, [], "\n" + "\n".join(failures))
+
+    def test_inapplicable_documents_never_answer(self):
+        """Процедура от другого двигателя опаснее, чем отсутствие ответа."""
+        failures = []
+        for case in self.cases:
+            if not case.get("forbid"):
+                continue
+            hits = self._search(case)
+            haystack = " || ".join(
+                citation(hit.chunk) + " " + hit.chunk["text"] for hit in hits
+            ).lower()
+            for forbidden in case["forbid"]:
+                if forbidden.lower() in haystack:
+                    failures.append(
+                        f"{case['query']!r}: в выдаче оказалось {forbidden!r} — "
+                        f"{case.get('note', '')}"
+                    )
         self.assertEqual(failures, [], "\n" + "\n".join(failures))
 
 

@@ -1,0 +1,57 @@
+{
+  "_comment": "Применимость документов к модификации автомобиля. Поле evidence — чем подтверждается охват; поле source отличает выведенное из корпуса от внесённого вручную.",
+
+  "engines": {
+    "K7M": {"displacement": "1.6 8V", "timing_drive": "belt", "source": "curated"},
+    "K4M": {"displacement": "1.6 16V", "timing_drive": "belt", "source": "curated"},
+    "H4M": {
+      "displacement": "1.6 16V",
+      "timing_drive": "chain",
+      "aka": ["HR16DE"],
+      "note": "Renault-Nissan HR16DE, на Sandero II с 2016 года. Привод ГРМ цепной: процедуры по ремню ГРМ к нему неприменимы.",
+      "source": "curated"
+    },
+    "K9K": {"displacement": "1.5 dCi", "timing_drive": "belt", "source": "curated"},
+    "D4F": {"displacement": "1.2 16V", "timing_drive": "belt", "source": "curated"},
+    "H4Dt": {"displacement": "0.9 TCe", "timing_drive": "chain", "source": "curated"},
+    "B4D": {"displacement": "1.0 SCe", "timing_drive": null, "source": "unknown"}
+  },
+
+  "document_engines": {
+    "service_manual": {
+      "engines": ["D4F", "K4M", "K7M", "K9K"],
+      "evidence": "единицы ENGINE OIL SPECIFICATIONS и ENGINE COOLING SYSTEM SPECIFICATION перечисляют ровно эти четыре двигателя; H4M не встречается в мануале ни разу",
+      "source": "derived"
+    },
+    "wiring": {
+      "engines": ["K7M", "K4M"],
+      "evidence": "в легенде схем 1,4-1,6 (8V) и 1,6 (16V) есть регулятор холостого хода — отдельный агрегат K-серии, которого у H4M с электронной дроссельной заслонкой нет",
+      "source": "derived"
+    },
+    "ru_owner": {
+      "engines": ["B4D", "H4Dt", "D4F", "K7M", "H4M", "K4M", "K9K"],
+      "evidence": "таблица характеристик двигателей в главе 6",
+      "note": "руководство по эксплуатации: перечисляет двигатели, но ремонтных процедур не содержит",
+      "source": "derived"
+    },
+    "en_owner": {
+      "engines": ["D4F", "K7M", "H4M", "K4M", "K9K"],
+      "evidence": "таблица характеристик двигателей в главе 6",
+      "note": "руководство по эксплуатации: перечисляет двигатели, но ремонтных процедур не содержит",
+      "source": "derived"
+    }
+  },
+
+  "not_covered": {
+    "H4M": "Ремонтных процедур по H4M в корпусе нет вообще: сервисный мануал 2012-2016 его не застал (двигатель пошёл на Sandero II с 2016 года), электросхемы относятся к K-серии. Руководства по эксплуатации упоминают H4M только в таблице идентификации."
+  },
+
+  "profile": {
+    "_comment": "Профиль конкретного автомобиля. Пока не задан: заполните, и поиск будет отсекать неприменимые документы автоматически. Пример: {\"model\": \"Sandero II\", \"year\": 2017, \"market\": \"RU\", \"engine\": \"H4M\", \"gearbox\": \"JH3\"}",
+    "model": "Sandero II (X52)",
+    "year": null,
+    "market": null,
+    "engine": null,
+    "gearbox": null
+  }
+}
