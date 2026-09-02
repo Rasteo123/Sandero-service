@@ -110,21 +110,32 @@ def render(
     return out_path
 
 
-def preset_maintenance(sources: dict) -> list[int]:
-    """Страницы с иллюстрациями в главах «Техобслуживание» и «Практические советы».
+def pages_with_figures(doc: str, sources: dict, chapters: tuple[int, ...] | None = None) -> list[int]:
+    """Страницы документа, на которых есть рисунки; можно сузить до глав.
 
-    Их отрисовываем заранее и кладём в скилл: это самые частые задачи
-    владельца — уровни, предохранители, лампы, замена колеса. Остальное
-    рендерится по требованию, иначе корпус вырос бы на сотни мегабайт.
+    Отрисовывать всё подряд бессмысленно: страница без единого рисунка
+    ничего не добавляет к тексту, который уже в корпусе.
     """
     import pymupdf
 
-    chunks = [c for c in load_chunks() if c["doc"] == "ru_owner" and c.get("chapter") in (4, 5)]
-    first = min(c["pdf_page"] for c in chunks)
-    last = max(c.get("pdf_page_end") or c["pdf_page"] for c in chunks)
-    document = next(d for d in sources["documents"] if d["doc"] == "ru_owner")
+    document = next(d for d in sources["documents"] if d["doc"] == doc)
+    first, last = 1, None
+    if chapters:
+        chunks = [c for c in load_chunks() if c["doc"] == doc and c.get("chapter") in chapters]
+        first = min(c["pdf_page"] for c in chunks)
+        last = max(c.get("pdf_page_end") or c["pdf_page"] for c in chunks)
     with pymupdf.open(str(CORPUS_DIR / document["file"])) as pdf:
+        last = last or pdf.page_count
         return [p for p in range(first, last + 1) if pdf[p - 1].get_images()]
+
+
+# Наборы страниц, которые имеет смысл отрисовать заранее и положить в скилл.
+# Сервисного мануала здесь нет намеренно: 3170 страниц с рисунками — это
+# больше 200 МБ, их рендерим по требованию.
+PRESETS = {
+    "maintenance": [("ru_owner", (4, 5))],
+    "owner": [("ru_owner", None), ("en_owner", None)],
+}
 
 
 def main() -> int:
@@ -135,7 +146,7 @@ def main() -> int:
     parser.add_argument("--dpi", type=int, default=140, help="разрешение (по умолчанию 140)")
     parser.add_argument(
         "--preset",
-        choices=["maintenance"],
+        choices=sorted(PRESETS),
         help="отрисовать набор, который идёт вместе со скиллом",
     )
     parser.add_argument("--out", type=Path, default=CACHE_DIR, help="куда складывать")
@@ -147,9 +158,12 @@ def main() -> int:
         pages.append(page_for_label(args.doc, args.label))
     fmt = "png"
     out_dir = args.out
-    if args.preset == "maintenance":
-        pages = preset_maintenance(sources)
+    if args.preset:
         out_dir, fmt = PAGES_DIR, "jpg"
+        for doc, chapters in PRESETS[args.preset]:
+            for page in pages_with_figures(doc, sources, chapters):
+                print(render(doc, page, sources, dpi=args.dpi, out_dir=out_dir, fmt=fmt))
+        return 0
 
     if not pages:
         parser.error("укажите номера страниц, --label или --preset")
