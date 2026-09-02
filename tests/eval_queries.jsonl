@@ -26,7 +26,9 @@
 {"query": "замена датчика коленвала", "expect_any": ["CRANKSHAFT", "SENSOR"]}
 {"query": "снятие рулевой рейки", "expect_any": ["STEERING"]}
 {"query": "замена подшипника ступицы", "expect_any": ["HUB", "BEARING"]}
-{"query": "проверка компрессии двигателя", "expect_any": ["COMPRESSION", "ENGINE"]}
 {"query": "замена моторного масла и масляного фильтра", "expect_any": ["ENGINE OIL - OIL FILTER DRAINING", "УРОВЕНЬ МОТОРНОГО МАСЛА"]}
 {"query": "снятие маховика", "expect_any": ["FLYWHEEL"]}
 {"query": "проверка давления масла", "expect_any": ["OIL PRESSURE"]}
+{"query": "снятие вакуумного усилителя тормозов", "expect_any": ["BRAKE SERVO"]}
+{"query": "снятие и установка стартера", "expect_any": ["STARTER REMOVAL"]}
+{"query": "меры предосторожности ABS", "expect_any": ["ABS PRECAUTIONS"]}

@@ -32,13 +32,19 @@
       "lang": "en",
       "pages": 3508,
       "indexed": true,
-      "note": "Исходный файл 83 МБ коннектор Google Drive не отдаёт и не разбирает целиком; владелец разбил его на 15 частей по 250 страниц. Номер страницы в цитатах — сквозной по исходному PDF. Практический предел выгрузки через коннектор около 6 МБ на файл: части 1, 10, 11 и 12 больше и пока не выгружены — их нужно скачать вручную, см. README.",
+      "note": "Исходный файл 83 МБ коннектор Google Drive не отдаёт и не разбирает целиком; владелец разбил его на 15 частей по 250 страниц. Номер страницы в цитатах — сквозной по исходному PDF. Практический предел выгрузки через коннектор около 6,3 МБ на файл: части 1 и 12 пришлось разрезать пополам и забрать zip-архивами (поле drive_zip_id), части 10 и 11 пока не выгружены.",
       "parts": [
         {
-          "part": 1,
-          "file": "pdf/2012-2016_RENAULT_Sandero_SM_compressed-1.pdf",
-          "drive_file_id": "1h-YXvnERXxvB5u7jBDOKaAPywML_WqwA",
+          "part": "1-1",
+          "file": "pdf/2012-2016_RENAULT_Sandero_SM_compressed-1-1.pdf",
+          "drive_zip_id": "1OYTK_izeBVR40d-rKd4Ksa3zjMdjGcm9",
           "page_offset": 0
+        },
+        {
+          "part": "1-2",
+          "file": "pdf/2012-2016_RENAULT_Sandero_SM_compressed-1-2.pdf",
+          "drive_zip_id": "1OYTK_izeBVR40d-rKd4Ksa3zjMdjGcm9",
+          "page_offset": 125
         },
         {
           "part": 2,
@@ -101,10 +107,16 @@
           "page_offset": 2500
         },
         {
-          "part": 12,
-          "file": "pdf/2012-2016_RENAULT_Sandero_SM_compressed-12.pdf",
-          "drive_file_id": "16Hc8M95jT_8EMJSUgRXogCDWrW0OCVws",
+          "part": "12-1",
+          "file": "pdf/2012-2016_RENAULT_Sandero_SM_compressed-12-1.pdf",
+          "drive_zip_id": "13MjHqeif4965uJwo3kJg2vyhGc73ZHyy",
           "page_offset": 2750
+        },
+        {
+          "part": "12-2",
+          "file": "pdf/2012-2016_RENAULT_Sandero_SM_compressed-12-2.pdf",
+          "drive_zip_id": "13MjHqeif4965uJwo3kJg2vyhGc73ZHyy",
+          "page_offset": 2875
         },
         {
           "part": 13,
@@ -125,7 +137,7 @@
           "page_offset": 3500
         }
       ],
-      "indexed_parts_note": "11 из 15 частей; недостающие части выпадут из индекса без ошибки"
+      "indexed_parts_note": "13 из 15 частей: нет частей 10 и 11 (пропуск P-S)"
     },
     {
       "doc": "wiring",

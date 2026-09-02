@@ -215,6 +215,18 @@ class Bm25Index:
 
         return list(concepts.values())
 
+    def _title_hit(self, idx: int, concept: dict) -> bool:
+        """Понятие попало в название единицы.
+
+        Многословная фраза засчитывается только целиком — иначе название
+        «HYDRAULIC BRAKE UNIT REMOVAL» получало бы надбавку за понятие «ABS»
+        из-за одного слова «brake» в паре «anti-lock braking».
+        """
+        title = self.title_tokens[idx]
+        if title & concept["terms"].keys():
+            return True
+        return any(set(phrase) <= title for phrase, _ in concept["phrases"])
+
     def _bm25(self, term: str, idx: int, tf: int) -> float:
         norm = 1 - B + B * (self.doc_len[idx] / self.avgdl if self.avgdl else 1)
         return self._idf(term) * (tf * (K1 + 1)) / (tf + K1 * norm)
@@ -272,10 +284,9 @@ class Bm25Index:
         matched: dict[int, set[str]] = defaultdict(set)
 
         for concept in concepts:
-            keys = set(concept["terms"]) | {t for phrase, _ in concept["phrases"] for t in phrase}
             best, best_term = self._concept_scores(concept)
             for idx, value in best.items():
-                if self.title_tokens[idx] & keys:
+                if self._title_hit(idx, concept):
                     value *= 1 + TITLE_BONUS
                 scores[idx] += value
                 covered[idx] += 1
