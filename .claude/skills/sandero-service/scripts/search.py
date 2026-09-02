@@ -25,6 +25,7 @@ from ragkit.bm25 import Bm25Index
 from ragkit.store import (
     citation,
     image_path,
+    page_pictures,
     load_chunks,
     load_sources,
     load_synonyms,
@@ -51,6 +52,8 @@ def render(hit, index: int, *, full: bool) -> str:
         meta += f"\n    файл: {picture}"
     elif chunk.get("drive_url"):
         meta += f"\n    {chunk['drive_url']}"
+    for page in page_pictures(chunk):
+        meta += f"\n    страница: {page}"
     return f"{header}\n{meta}\n{body}"
 
 

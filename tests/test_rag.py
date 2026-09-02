@@ -19,7 +19,14 @@ from ragkit.applicability import check as check_applicability
 from ragkit.applicability import engines_in_text, restrict
 from ragkit.bm25 import Bm25Index
 from ragkit.chunker import chunk_page, chunk_unit, parse_page, parse_service_page, section_key
-from ragkit.store import citation, image_path, load_chunks, load_synonyms, load_vehicle
+from ragkit.store import (
+    citation,
+    image_path,
+    load_chunks,
+    load_synonyms,
+    load_vehicle,
+    page_pictures,
+)
 from ragkit.textnorm import stem, tokenize, trigrams
 
 
@@ -281,6 +288,14 @@ class TestCorpus(unittest.TestCase):
         self.assertGreaterEqual(len({c["image"] for c in images}), 22)
         missing = sorted({c["image"] for c in images if image_path(c) is None})
         self.assertEqual(missing, [], f"нет файлов иллюстраций: {missing}")
+
+    def test_maintenance_chapters_ship_with_pictures(self):
+        """«Отверните пробку 1» без рисунка наполовину бесполезно."""
+        with_pictures = [
+            c for c in self.chunks
+            if c["doc"] == "ru_owner" and c.get("chapter") in (4, 5) and page_pictures(c)
+        ]
+        self.assertGreaterEqual(len(with_pictures), 20)
 
     def test_engine_specific_diagrams_are_tagged(self):
         """Схемы 8V и 16V — это K7M и K4M: без метки поиск смешал бы их."""

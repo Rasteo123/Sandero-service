@@ -14,6 +14,10 @@ VEHICLE_PATH = DATA_DIR / "vehicle.json"
 # Иллюстрации лежат внутри скилла: без них он не может показать схему,
 # а пересказ электросхемы словами бесполезен.
 IMAGES_DIR = SKILL_ROOT / "assets" / "wiring"
+# Заранее отрисованные страницы, которые идут вместе со скиллом.
+PAGES_DIR = SKILL_ROOT / "assets" / "pages"
+# Страницы, отрисованные по требованию: кэш, в git не хранится.
+CACHE_DIR = SKILL_ROOT / "assets" / "cache"
 # Исходники (PDF/JPG) в git не хранятся — их восстанавливает scripts/drive_import.py
 CORPUS_DIR = SKILL_ROOT.parents[2] / "corpus"
 
@@ -78,6 +82,28 @@ def image_path(chunk: dict) -> Path | None:
         return None
     path = IMAGES_DIR / name
     return path if path.exists() else None
+
+
+def page_picture(doc: str, page: int) -> Path | None:
+    """Заранее отрисованная страница документа, если она идёт со скиллом."""
+    path = PAGES_DIR / doc / f"p{page:04d}.jpg"
+    return path if path.exists() else None
+
+
+def page_pictures(chunk: dict, limit: int = 3) -> list[Path]:
+    """Отрисованные страницы, попадающие в диапазон единицы."""
+    start = chunk.get("pdf_page")
+    if start is None:
+        return []
+    end = chunk.get("pdf_page_end") or start
+    found = []
+    for page in range(int(start), int(end) + 1):
+        picture = page_picture(chunk["doc"], page)
+        if picture:
+            found.append(picture)
+            if len(found) >= limit:
+                break
+    return found
 
 
 def citation(chunk: dict) -> str:
