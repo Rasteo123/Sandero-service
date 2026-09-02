@@ -192,7 +192,9 @@
     "колодки",
     "brake pads",
     "pads",
-    "pad"
+    "pad",
+    "brake lining",
+    "lining"
   ],
   "тормозные диски": [
     "диски",
@@ -571,7 +573,9 @@
     "brake disc"
   ],
   "тормозной барабан": [
-    "brake drum"
+    "барабан",
+    "brake drum",
+    "drum"
   ],
   "главный тормозной цилиндр": [
     "master cylinder"
@@ -897,5 +901,10 @@
     "расширительный бачок",
     "reservoir",
     "tank"
+  ],
+  "тормозной цилиндр": [
+    "рабочий цилиндр",
+    "brake cylinder",
+    "wheel cylinder"
   ]
 }

@@ -35,3 +35,6 @@
 {"query": "прокачка гидроусилителя руля", "expect_any": ["POWER-ASSISTED STEERING CIRCUIT BLEEDING"]}
 {"query": "снятие задней балки", "expect_any": ["REAR AXLE"]}
 {"query": "снятие радиатора охлаждения", "expect_any": ["COOLING RADIATOR"]}
+{"query": "снятие заднего тормозного цилиндра", "expect_any": ["REAR BRAKE CYLINDER"]}
+{"query": "замена задних тормозных колодок", "expect_any": ["REAR BRAKE LINING", "REAR BRAKE"]}
+{"query": "снятие тормозного барабана", "expect_any": ["REAR BRAKE DRUM"]}
