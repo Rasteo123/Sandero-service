@@ -50,19 +50,31 @@ def build_index(chunks: list[dict] | None = None):
     return Bm25Index(chunks if chunks is not None else load_chunks(), load_synonyms())
 
 
+def _span(start, end, prefix: str) -> str | None:
+    """«стр. 4.6-4.9» для единицы на несколько страниц, «стр. 4.7» для одной."""
+    if start is None:
+        return None
+    if end is None or str(end) == str(start):
+        return f"{prefix} {start}"
+    return f"{prefix} {start}-{end}"
+
+
 def citation(chunk: dict) -> str:
     """Человекочитаемая ссылка на источник — то, что скилл обязан показывать."""
     bits = [str(chunk.get("doc_title", chunk.get("doc", "?")))]
     section = chunk.get("section")
     if section:
         bits.append(str(section))
-    page_label = chunk.get("page_label")
-    if page_label:
-        bits.append(f"стр. {page_label}")
-    pdf_page = chunk.get("pdf_page")
-    if pdf_page:
-        bits.append(f"PDF-стр. {pdf_page}")
+    label = _span(chunk.get("page_label"), chunk.get("page_label_end"), "стр.")
+    if label:
+        bits.append(label)
+    pdf = _span(chunk.get("pdf_page"), chunk.get("pdf_page_end"), "PDF-стр.")
+    if pdf:
+        bits.append(pdf)
     image = chunk.get("image")
     if image:
         bits.append(f"иллюстрация {image}")
+    parts = chunk.get("unit_parts") or 1
+    if parts > 1:
+        bits.append(f"фрагмент {int(chunk['id'].rsplit(':', 1)[1]) + 1} из {parts}")
     return " — ".join(bits)

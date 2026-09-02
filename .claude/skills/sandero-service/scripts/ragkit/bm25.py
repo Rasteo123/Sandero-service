@@ -6,32 +6,36 @@ import math
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
-from .textnorm import CYRILLIC_RE, LATIN_RE, tokenize, trigrams
+from .textnorm import tokenize, trigrams
 
 K1 = 1.5
 B = 0.75
 # Порог схожести триграмм для «спасения» неизвестного слова запроса.
 FUZZY_THRESHOLD = 0.62
 FUZZY_MAX_MATCHES = 3
-# Вес расширенных терминов относительно исходных слов запроса.
-EXPANSION_WEIGHT = 0.55
+# Словарь синонимов выверен вручную, поэтому его связи почти равноправны словам
+# запроса: сервисный мануал англоязычный, и русский вопрос доходит до него
+# только через кросс-языковые пары.
+SYNONYM_WEIGHT = 0.95
+# Догадки по триграммам менее надёжны, поэтому весят меньше.
+FUZZY_WEIGHT = 0.55
 # Надбавка за фразу: слова запроса стоят в тексте рядом и в том же порядке.
 PHRASE_BONUS = 0.9
-# Надбавка документу на языке запроса — русский вопрос предпочитает русский оригинал.
-LANG_BONUS = 0.3
+# Надбавка за понятие, попавшее в название единицы: для процедурного документа
+# заголовок «CLUTCH: REMOVAL - REFITTING» — сильнейший признак релевантности.
+TITLE_BONUS = 1.6
+# Спрашивают число — предпочитаем фрагмент, где это число есть. Пока такой
+# признак один: момент затяжки, который при сборке помечается has_torque.
+ANSWER_BONUS = 0.8
+TORQUE_TERMS = frozenset(tokenize("момент затяжки torque tightening n.m"))
 # Сколько кандидатов BM25 переоценивать фразовой близостью.
 RERANK_DEPTH = 60
-
-
-def detect_lang(text: str) -> str | None:
-    """Язык запроса по преобладающему алфавиту: ru, en или None при ничьей."""
-    cyrillic = len(CYRILLIC_RE.findall(text))
-    latin = len(LATIN_RE.findall(text))
-    if cyrillic > latin:
-        return "ru"
-    if latin > cyrillic:
-        return "en"
-    return None
+# Насколько жёстко требовать, чтобы документ закрывал все понятия запроса.
+COVERAGE_POWER = 1.5
+# Служебные слова: связав через них группы, мы связали бы весь словарь.
+STOPWORD_STEMS = frozenset(
+    tokenize("и в на по с от для к или а the a of and to in for with on at")
+)
 
 
 @dataclass
@@ -53,12 +57,14 @@ class Bm25Index:
         self.postings: dict[str, list[tuple[int, int]]] = defaultdict(list)
         self.doc_len: list[int] = []
         self.doc_tokens: list[list[str]] = []
+        self.title_tokens: list[frozenset[str]] = []
         self._trigram_buckets: dict[str, set[str]] = defaultdict(set)
 
         for idx, chunk in enumerate(chunks):
             tokens = tokenize(self._indexable_text(chunk))
             self.doc_len.append(len(tokens))
             self.doc_tokens.append(tokens)
+            self.title_tokens.append(frozenset(tokenize(chunk.get("section") or "")))
             for term, tf in Counter(tokens).items():
                 self.postings[term].append((idx, tf))
 
@@ -68,7 +74,7 @@ class Bm25Index:
             for tri in trigrams(term):
                 self._trigram_buckets[tri].add(term)
 
-        self.synonyms = self._compile_synonyms(synonyms or {})
+        self.synonyms: list[list[list[str]]] = self._compile_synonyms(synonyms or {})
 
     @staticmethod
     def _indexable_text(chunk: dict) -> str:
@@ -87,21 +93,32 @@ class Bm25Index:
         ]
         return "\n".join(p for p in parts if p)
 
-    def _compile_synonyms(self, raw: dict[str, list[str]]) -> dict[str, list[str]]:
-        """Слова синонимов -> основы; ключи тоже раскладываются на основы."""
-        compiled: dict[str, list[str]] = defaultdict(list)
+    @staticmethod
+    def _compile_synonyms(raw: dict[str, list[str]]) -> list[list[list[str]]]:
+        """Словарь -> группы фраз, где каждая фраза это список основ.
+
+        Расширение срабатывает по фразе целиком, а не по отдельным словам.
+        Иначе группы слипаются через общее слово: «замена масла» выстреливала
+        бы на запросе «замена сцепления» и тащила в выдачу масляные страницы.
+        """
+        groups: list[list[list[str]]] = []
         for key, values in raw.items():
-            key_tokens = tokenize(key)
-            value_tokens: list[str] = []
-            for value in values:
-                value_tokens.extend(tokenize(value))
-            group = list(dict.fromkeys(key_tokens + value_tokens))
-            # Двусторонняя связь: любой член группы тянет за собой остальные.
-            for member in group:
-                for other in group:
-                    if other != member and other not in compiled[member]:
-                        compiled[member].append(other)
-        return dict(compiled)
+            if key.startswith("_"):
+                continue
+            phrases = []
+            for phrase in [key, *values]:
+                stems = [t for t in dict.fromkeys(tokenize(phrase)) if t not in STOPWORD_STEMS]
+                if not stems:
+                    continue
+                if stems not in phrases:
+                    phrases.append(stems)
+                # Длинное название обычно сокращают: «головка блока» вместо
+                # «головка блока цилиндров». Первые два слова тоже открывают группу.
+                if len(stems) > 2 and stems[:2] not in phrases:
+                    phrases.append(stems[:2])
+            if len(phrases) > 1:
+                groups.append(phrases)
+        return groups
 
     def _idf(self, term: str) -> float:
         df = len(self.postings.get(term, ()))
@@ -125,20 +142,118 @@ class Bm25Index:
         scored.sort(reverse=True)
         return [c for _, c in scored[:FUZZY_MAX_MATCHES]]
 
-    def expand(self, query: str) -> dict[str, float]:
-        """Запрос -> {основа: вес}. Синонимы и нечёткие формы идут с меньшим весом."""
-        weights: dict[str, float] = {}
-        for term in tokenize(query):
-            weights[term] = max(weights.get(term, 0.0), 1.0)
-        for term in list(weights):
-            for synonym in self.synonyms.get(term, ()):
-                if synonym not in weights:
-                    weights[synonym] = EXPANSION_WEIGHT
-            if term not in self.postings:
-                for near in self.fuzzy_matches(term):
-                    if near not in weights:
-                        weights[near] = EXPANSION_WEIGHT
-        return weights
+    def expand(self, query: str) -> list[dict]:
+        """Запрос -> список понятий; понятие это слово запроса со своими синонимами.
+
+        Понятия нужны, чтобы документ не выигрывал повторами одного слова:
+        «замена сцепления» это два понятия, и страница про замену ламп
+        закрывает только одно из них.
+
+        Многословный синоним хранится отдельно от одиночных и засчитывается
+        только целиком: иначе «удаление воздуха» отдало бы в понятие «прокачка»
+        слово «воздух», и страница про кондиционер считалась бы прокачкой.
+        """
+        tokens = [t for t in dict.fromkeys(tokenize(query)) if t not in STOPWORD_STEMS]
+        if not tokens:
+            tokens = list(dict.fromkeys(tokenize(query)))
+        if not tokens:
+            return []
+
+        position = {token: index for index, token in enumerate(tokens)}
+        parent = list(range(len(tokens)))
+
+        def root(index: int) -> int:
+            while parent[index] != index:
+                parent[index] = parent[parent[index]]
+                index = parent[index]
+            return index
+
+        def merge(left: int, right: int) -> None:
+            left, right = root(left), root(right)
+            if left != right:
+                parent[right] = left
+
+        singles: dict[int, set[str]] = {index: set() for index in range(len(tokens))}
+        phrases: dict[int, set[tuple[str, ...]]] = {index: set() for index in range(len(tokens))}
+        for group in self.synonyms:
+            matched = [phrase for phrase in group if set(phrase) <= position.keys()]
+            if not matched:
+                continue
+            # Многословная фраза («моторное масло») — одно понятие, а не два.
+            anchor = position[matched[0][0]]
+            for phrase in matched:
+                for term in phrase:
+                    merge(anchor, position[term])
+            for phrase in group:
+                if len(phrase) == 1:
+                    singles[root(anchor)].add(phrase[0])
+                else:
+                    phrases[root(anchor)].add(tuple(phrase))
+
+        concepts: dict[int, dict] = {}
+        for token, index in position.items():
+            concept = concepts.setdefault(root(index), {"terms": {}, "phrases": []})
+            concept["terms"][token] = 1.0
+        for index, terms in singles.items():
+            if not terms:
+                continue
+            concept = concepts.setdefault(root(index), {"terms": {}, "phrases": []})
+            for term in terms:
+                concept["terms"].setdefault(term, SYNONYM_WEIGHT)
+        for index, groups in phrases.items():
+            if not groups:
+                continue
+            concept = concepts.setdefault(root(index), {"terms": {}, "phrases": []})
+            concept["phrases"].extend((phrase, SYNONYM_WEIGHT) for phrase in groups)
+
+        for token, index in position.items():
+            if token in self.postings:
+                continue
+            concept = concepts[root(index)]
+            for near in self.fuzzy_matches(token):
+                concept["terms"].setdefault(near, FUZZY_WEIGHT)
+
+        return list(concepts.values())
+
+    def _bm25(self, term: str, idx: int, tf: int) -> float:
+        norm = 1 - B + B * (self.doc_len[idx] / self.avgdl if self.avgdl else 1)
+        return self._idf(term) * (tf * (K1 + 1)) / (tf + K1 * norm)
+
+    def _concept_scores(self, concept: dict) -> tuple[dict[int, float], dict[int, str]]:
+        """Лучшее совпадение понятия в каждом документе.
+
+        Синонимы внутри понятия конкурируют, а не складываются: три слова об
+        одном и том же не должны весить втрое больше одного точного.
+        """
+        best: dict[int, float] = {}
+        best_term: dict[int, str] = {}
+
+        def offer(idx: int, value: float, label: str) -> None:
+            if value > best.get(idx, 0.0):
+                best[idx] = value
+                best_term[idx] = label
+
+        for term, weight in concept["terms"].items():
+            for idx, tf in self.postings.get(term, ()):
+                offer(idx, weight * self._bm25(term, idx, tf), term)
+
+        for phrase, weight in concept["phrases"]:
+            postings = [dict(self.postings.get(term, ())) for term in phrase]
+            if not all(postings):
+                continue
+            common = set(postings[0])
+            for other in postings[1:]:
+                common &= other.keys()
+            for idx in common:
+                # Требование «все слова фразы на месте» — это защита от ложных
+                # срабатываний; сама оценка складывается из всех её слов, иначе
+                # кросс-языковая пара («timing belt») заведомо проигрывает
+                # одному русскому слову с высоким весом.
+                value = weight * sum(
+                    self._bm25(term, idx, postings[n][idx]) for n, term in enumerate(phrase)
+                )
+                offer(idx, value, " ".join(phrase))
+        return best, best_term
 
     def search(
         self,
@@ -148,27 +263,36 @@ class Bm25Index:
         where: dict[str, object] | None = None,
         per_doc: int | None = None,
     ) -> list[Hit]:
-        weights = self.expand(query)
+        concepts = self.expand(query)
+        if not concepts:
+            return []
         query_tokens = tokenize(query)
         scores: dict[int, float] = defaultdict(float)
+        covered: dict[int, int] = defaultdict(int)
         matched: dict[int, set[str]] = defaultdict(set)
 
-        for term, weight in weights.items():
-            postings = self.postings.get(term)
-            if not postings:
-                continue
-            idf = self._idf(term)
-            for idx, tf in postings:
-                norm = 1 - B + B * (self.doc_len[idx] / self.avgdl if self.avgdl else 1)
-                scores[idx] += weight * idf * (tf * (K1 + 1)) / (tf + K1 * norm)
-                matched[idx].add(term)
+        for concept in concepts:
+            keys = set(concept["terms"]) | {t for phrase, _ in concept["phrases"] for t in phrase}
+            best, best_term = self._concept_scores(concept)
+            for idx, value in best.items():
+                if self.title_tokens[idx] & keys:
+                    value *= 1 + TITLE_BONUS
+                scores[idx] += value
+                covered[idx] += 1
+                matched[idx].add(best_term[idx])
 
+        # Покрытие понятий: документ, ответивший на весь запрос, важнее того,
+        # кто много раз повторил одно слово из него.
+        total = len(concepts)
+        for idx in list(scores):
+            scores[idx] *= (covered[idx] / total) ** COVERAGE_POWER
+
+        wants_torque = bool(TORQUE_TERMS & set(query_tokens))
         ranked = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
-        query_lang = detect_lang(query)
         for idx, score in ranked[:RERANK_DEPTH]:
             score += self._phrase_bonus(idx, query_tokens)
-            if query_lang and self.chunks[idx].get("lang") == query_lang:
-                score *= 1 + LANG_BONUS
+            if wants_torque and self.chunks[idx].get("has_torque"):
+                score *= 1 + ANSWER_BONUS
             scores[idx] = score
 
         hits = [
@@ -180,6 +304,7 @@ class Bm25Index:
         if per_doc:
             hits = self._limit_per_doc(hits, per_doc)
         return hits[:top_k]
+
 
     def _phrase_bonus(self, idx: int, query_tokens: list[str]) -> float:
         """Награда за то, что слова запроса стоят в тексте рядом и в том же порядке."""

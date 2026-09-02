@@ -178,11 +178,33 @@ def _split_oversized(paragraph: str, target: int) -> list[str]:
     return [piece for piece in pieces if piece]
 
 
+# Хвост «(2/4)» отличает продолжение раздела от нового раздела.
+CONTINUATION = re.compile(r"\s*\(\d{1,2}\s*/\s*\d{1,2}\)\s*$")
+
+
+def section_key(section: str) -> str:
+    """«ЗАМЕНА КОЛЕСА (2/2)» -> «ЗАМЕНА КОЛЕСА»: продолжения — один раздел."""
+    return CONTINUATION.sub("", section).strip()
+
+
+def chunk_unit(text: str, *, target: int = 1300, overlap: int = 140) -> list[str]:
+    """Режет смысловую единицу на части ~target символов по границам абзацев.
+
+    Единица (процедура, раздел) обычно длиннее страницы, поэтому и цель больше:
+    внутри одного чанка должны уместиться и предупреждение, и сами шаги.
+    """
+    return _pack(_paragraphs(text), target=target, overlap=overlap)
+
+
 def chunk_page(page: dict, *, target: int = 900, overlap: int = 160) -> list[str]:
     """Режет страницу на чанки ~target символов по границам абзацев."""
+    return _pack(_paragraphs(page["text"]), target=target, overlap=overlap)
+
+
+def _pack(paragraphs: list[str], *, target: int, overlap: int) -> list[str]:
     paragraphs = [
         piece
-        for paragraph in _paragraphs(page["text"])
+        for paragraph in paragraphs
         for piece in _split_oversized(paragraph, target)
     ]
     chunks: list[str] = []
@@ -198,3 +220,78 @@ def chunk_page(page: dict, *, target: int = 900, overlap: int = 160) -> list[str
     if current.strip():
         chunks.append(current.strip())
     return [c for c in chunks if len(c) >= 40]
+
+
+# --- Сервисный мануал Renault (другой формат вёрстки) --------------------
+# Счётчик страниц внутри процедуры: «- 1 -», «- 7 -»
+SM_STEP = re.compile(r"^-\s*(\d{1,3})\s*-$")
+# Идентификатор исходного XML и версия шаблона — служебные строки
+SM_NOISE = re.compile(
+    r"^(?:Repair-[\w x.-]+\.xml|XSL version\s*:.*|Edition Anglaise|MR-\d+.*)$",
+    re.IGNORECASE,
+)
+# Код системы по номенклатуре Renault: «(21A, Manual gearbox)», «(88C, Airbags)»
+SM_SYSTEM = re.compile(r"\((\d{2}[A-Z]),\s*([^)]{3,60})\)")
+# Момент затяжки: «25 N.m», «120 N.m + 90 ± 15»
+SM_TORQUE = re.compile(r"\d+(?:[.,]\d+)?\s*(?:N\.?m|daN\.?m)\b", re.IGNORECASE)
+# Нумерованный подзаголовок шага: «2. REMOVAL OPERATION», «3- SYNCHROMESH RING»
+SM_SUBSTEP = re.compile(r"^\d+\s*[.\-)]")
+
+
+def _is_procedure_title(line: str) -> bool:
+    """Название процедуры, а не заголовок шага внутри неё."""
+    if SM_SUBSTEP.match(line) or len(line) < 10:
+        return False
+    return _is_heading(line)
+
+
+def parse_service_page(text: str) -> dict:
+    """Разбирает страницу сервисного мануала.
+
+    В отличие от руководства по эксплуатации здесь нет нумерации по главам:
+    ориентир — заголовок процедуры и её внутренний счётчик страниц.
+    """
+    text = HYPHEN_BREAK.sub(r"\1\2", text)
+    step = None
+    title = None
+    doc_ref = None
+    kept: list[str] = []
+    seen: set[str] = set()
+
+    for raw in text.split("\n"):
+        line = raw.strip()
+        if not line:
+            continue
+        match = SM_STEP.match(line)
+        if match:
+            step = step or int(match.group(1))
+            continue
+        if SM_NOISE.match(line):
+            if line.lower().startswith("repair-"):
+                doc_ref = doc_ref or line
+            continue
+        if title is None and _is_procedure_title(line):
+            title = line
+        key = line.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        kept.append(line)
+
+    body = "\n".join(kept)
+    system = None
+    system_match = SM_SYSTEM.search(text)
+    if system_match:
+        system = f"{system_match.group(1)}, {system_match.group(2).strip()}"
+
+    return {
+        "page_label": None,
+        "chapter": None,
+        "section": title,
+        "section_src": system,
+        "step": step,
+        "doc_ref": doc_ref,
+        "has_torque": bool(SM_TORQUE.search(body)),
+        "text": body,
+        "toc_ratio": 0.0,
+    }

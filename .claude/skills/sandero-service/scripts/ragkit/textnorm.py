@@ -73,27 +73,35 @@ def stem_ru(word: str) -> str:
 
 
 # --- Лёгкий стеммер для английского -------------------------------------
+# (суффикс, замена, минимальная длина основы). Разный минимум не прихоть:
+# окончание множественного числа безопасно и на коротком слове (pads -> pad),
+# а глагольное -ed на нём ломает смысл (bleed -> ble), и формы расходятся.
 _EN_RULES = (
-    ("ational", "ate"), ("iveness", "ive"), ("fulness", "ful"), ("ousness", "ous"),
-    ("ization", "ize"), ("ations", "ate"), ("tional", "tion"), ("alism", "al"),
-    ("ities", "ity"), ("ement", "e"), ("ments", "ment"), ("ingly", ""),
-    ("ances", "ance"), ("ences", "ence"), ("ering", "er"), ("ings", ""),
-    ("ness", ""), ("ment", ""), ("ions", "ion"), ("ing", ""), ("ers", "er"),
-    ("ies", "y"), ("ied", "y"), ("ses", "s"), ("ed", ""), ("es", ""), ("s", ""),
+    ("ational", "ate", 4), ("iveness", "ive", 4), ("fulness", "ful", 4),
+    ("ousness", "ous", 4), ("ization", "ize", 4), ("ations", "ate", 4),
+    ("tional", "tion", 4), ("alism", "al", 4), ("ities", "ity", 4),
+    ("ements", "ement", 4), ("ances", "ance", 4), ("ences", "ence", 4),
+    ("ingly", "", 4), ("ings", "", 4), ("ness", "", 4), ("ions", "ion", 4),
+    ("ing", "", 4), ("ers", "er", 4), ("ies", "y", 3), ("ied", "y", 4),
+    ("ses", "se", 3), ("ed", "", 4), ("es", "", 3), ("s", "", 3),
 )
+
+
+def _drop_silent_e(word: str) -> str:
+    """Немое «e» снимается всегда: иначе fuse и fuses дают разные основы."""
+    return word[:-1] if len(word) > 3 and word.endswith("e") else word
 
 
 def stem_en(word: str) -> str:
     if len(word) <= 3:
         return word
-    for suffix, repl in _EN_RULES:
-        if word.endswith(suffix) and len(word) - len(suffix) + len(repl) >= 3:
-            word = word[: -len(suffix)] + repl
-            break
-    # Немое «e» снимается всегда, иначе fuse и fuses дают разные основы.
-    if len(word) > 3 and word.endswith("e"):
-        word = word[:-1]
-    return word
+    for suffix, repl, min_len in _EN_RULES:
+        if not word.endswith(suffix):
+            continue
+        candidate = word[: -len(suffix)] + repl
+        if len(candidate) >= min_len:
+            return _drop_silent_e(candidate)
+    return _drop_silent_e(word)
 
 
 def stem(token: str) -> str:

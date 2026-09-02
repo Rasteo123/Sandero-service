@@ -15,8 +15,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILL_SCRIPTS = REPO_ROOT / ".claude" / "skills" / "sandero-service" / "scripts"
 sys.path.insert(0, str(SKILL_SCRIPTS))
 
-from ragkit.bm25 import Bm25Index, detect_lang
-from ragkit.chunker import chunk_page, parse_page
+from ragkit.bm25 import Bm25Index
+from ragkit.chunker import chunk_page, chunk_unit, parse_page, parse_service_page, section_key
 from ragkit.store import citation, load_chunks, load_synonyms
 from ragkit.textnorm import stem, tokenize, trigrams
 
@@ -32,9 +32,21 @@ class TestTextNorm(unittest.TestCase):
             stems = {stem(word) for word in group}
             self.assertEqual(len(stems), 1, f"{group} -> {stems}")
 
-    def test_english_plurals_share_a_stem(self):
-        self.assertEqual(stem("fuses"), stem("fuse"))
-        self.assertEqual(stem("wipers"), stem("wiper"))
+    def test_english_forms_share_a_stem(self):
+        for group in (
+            ("fuse", "fuses"),
+            ("pad", "pads"),
+            ("bleed", "bleeding", "bleeds"),
+            ("brake", "brakes"),
+            ("remove", "removing", "removed"),
+        ):
+            stems = {stem(word) for word in group}
+            self.assertEqual(len(stems), 1, f"{group} -> {stems}")
+
+    def test_short_verbs_are_not_over_stemmed(self):
+        # bleed -> ble сломало бы совпадение с bleeding
+        for word in ("speed", "need", "seal", "head"):
+            self.assertEqual(stem(word), word)
 
     def test_tokens_with_digits_are_left_intact(self):
         self.assertIn("10w-40", tokenize("масло 10W-40"))
@@ -89,7 +101,7 @@ class TestChunker(unittest.TestCase):
     def test_illustration_callouts_are_dropped_but_table_values_kept(self):
         lines = self.page["text"].split("\n")
         self.assertNotIn("1 2", lines)
-        self.assertIn("75", lines, "трёхзначные и одиночные числа таблиц должны остаться")
+        self.assertIn("75", lines, "числа таблиц характеристик должны остаться")
 
     def test_hyphenated_line_break_is_joined(self):
         self.assertIn("повреждения узлов", self.page["text"])
@@ -98,73 +110,112 @@ class TestChunker(unittest.TestCase):
         page = parse_page("6.7\nГАБАРИТНЫЕ РАЗМЕРЫ (в метрах) (1/3)\n4,357")
         self.assertEqual(page["section"], "ГАБАРИТНЫЕ РАЗМЕРЫ (в метрах) (1/3)")
 
-    def test_chunks_respect_target_size(self):
-        page = parse_page("5.1\nЗАГОЛОВОК РАЗДЕЛА\n" + "Это предложение про ремонт. " * 200)
-        chunks = chunk_page(page, target=900, overlap=100)
+    def test_section_key_merges_continuations(self):
+        self.assertEqual(section_key("ЗАМЕНА КОЛЕСА (2/2)"), "ЗАМЕНА КОЛЕСА")
+        self.assertEqual(section_key("ЗАМЕНА КОЛЕСА"), "ЗАМЕНА КОЛЕСА")
+
+    def test_long_unit_is_split_at_paragraphs(self):
+        chunks = chunk_unit("Это предложение про ремонт. " * 200, target=1300)
         self.assertGreater(len(chunks), 1)
-        self.assertTrue(all(len(chunk) < 1400 for chunk in chunks))
+        self.assertTrue(all(len(chunk) <= 1400 for chunk in chunks))
+
+    def test_page_chunking_still_works(self):
+        chunks = chunk_page(self.page)
+        self.assertTrue(chunks and all(chunks))
+
+
+class TestServiceChunker(unittest.TestCase):
+    PAGE = "\n".join(
+        [
+            "- 3 -",
+            "Remove the clutch bolts (3) .",
+            "2. REMOVAL OPERATION",
+            "Torque tighten the clutch bolts 25 N.m .",
+            "See (20A, Clutch) for details.",
+            "XSL version : 3.02 du 22/07/11",
+            "Repair-12x01x03x01-01x37-1-6-1.xml",
+        ]
+    )
+
+    def setUp(self):
+        self.page = parse_service_page(self.PAGE)
+
+    def test_step_counter(self):
+        self.assertEqual(self.page["step"], 3)
+
+    def test_service_noise_is_dropped(self):
+        self.assertNotIn("XSL version", self.page["text"])
+        self.assertNotIn("Repair-12x01", self.page["text"])
+
+    def test_numbered_substep_is_not_a_procedure_title(self):
+        self.assertIsNone(self.page["section"])
+
+    def test_renault_system_code(self):
+        self.assertEqual(self.page["section_src"], "20A, Clutch")
+
+    def test_torque_is_detected(self):
+        self.assertTrue(self.page["has_torque"])
 
 
 class TestBm25(unittest.TestCase):
     CHUNKS = [
         {
-            "id": "a",
-            "doc": "ru_owner",
-            "lang": "ru",
-            "section": "УРОВЕНЬ МОТОРНОГО МАСЛА",
-            "text": "Проверьте уровень масла щупом на холодном двигателе.",
+            "id": "a", "doc": "ru_owner", "lang": "ru", "section": "ЗАМЕНА КОЛЕСА",
+            "text": "Затяните болты колеса. Сцепление шин с дорогой ухудшается.",
         },
         {
-            "id": "b",
-            "doc": "ru_owner",
-            "lang": "ru",
-            "section": "ДАВЛЕНИЕ ВОЗДУХА В ШИНАХ",
-            "text": "Давление в шинах проверяйте на холодных шинах.",
+            "id": "b", "doc": "service_manual", "lang": "en", "section": "CLUTCH REMOVAL",
+            "text": "Remove the clutch. Parts always to be replaced: clutch plate.",
         },
         {
-            "id": "c",
-            "doc": "en_owner",
-            "lang": "en",
-            "section": "TYRE PRESSURE",
+            "id": "c", "doc": "en_owner", "lang": "en", "section": "TYRE PRESSURE",
             "text": "Check the tyre pressure when the tyres are cold.",
         },
     ]
+    SYNONYMS = {
+        "замена": ["removal", "replaced"],
+        "сцепление": ["clutch"],
+        "давление в шинах": ["tyre pressure"],
+        "прокачка": ["удаление воздуха"],
+    }
 
     def setUp(self):
-        self.index = Bm25Index(self.CHUNKS, {"давление в шинах": ["tyre pressure"]})
+        self.index = Bm25Index(self.CHUNKS, self.SYNONYMS)
 
     def test_finds_the_matching_chunk(self):
-        hits = self.index.search("уровень масла", top_k=1)
-        self.assertEqual(hits[0].chunk["id"], "a")
+        self.assertEqual(self.index.search("болты колеса", top_k=1)[0].chunk["id"], "a")
 
-    def test_synonyms_cross_the_language_gap(self):
-        ids = {hit.chunk["id"] for hit in self.index.search("давление в шинах", top_k=3)}
-        self.assertIn("c", ids)
+    def test_cross_language_synonym_reaches_english_manual(self):
+        self.assertEqual(self.index.search("замена сцепления", top_k=1)[0].chunk["id"], "b")
 
-    def test_query_language_is_preferred(self):
-        self.assertEqual(self.index.search("tyre pressure", top_k=1)[0].chunk["id"], "c")
-        self.assertEqual(self.index.search("давление в шинах", top_k=1)[0].chunk["id"], "b")
+    def test_concept_coverage_beats_repetition(self):
+        """Страница про замену колеса упоминает «сцепление» в смысле сцепления
+        шин с дорогой — она не должна обойти процедуру про сцепление."""
+        hits = self.index.search("замена сцепления", top_k=3)
+        self.assertEqual(hits[0].chunk["id"], "b")
+
+    def test_multiword_synonym_needs_all_of_its_words(self):
+        """«удаление воздуха» не должно срабатывать по одному слову «воздух»."""
+        concepts = self.index.expand("прокачка")
+        phrases = [phrase for concept in concepts for phrase, _ in concept["phrases"]]
+        self.assertTrue(any(len(phrase) > 1 for phrase in phrases))
+        for concept in concepts:
+            self.assertNotIn("воздух", concept["terms"])
 
     def test_filters(self):
         hits = self.index.search("cold", top_k=5, where={"doc": "en_owner"})
         self.assertTrue(all(hit.chunk["doc"] == "en_owner" for hit in hits))
 
     def test_per_doc_cap(self):
-        hits = self.index.search("холодн", top_k=5, per_doc=1)
+        hits = self.index.search("clutch tyre колеса", top_k=5, per_doc=1)
         docs = [hit.chunk["doc"] for hit in hits]
         self.assertEqual(len(docs), len(set(docs)))
 
     def test_typo_is_recovered_by_trigrams(self):
-        hits = self.index.search("давлени в шынах", top_k=1)
-        self.assertEqual(hits[0].chunk["id"], "b")
+        self.assertEqual(self.index.search("сцеплени", top_k=1)[0].chunk["id"], "b")
 
     def test_unknown_query_returns_nothing(self):
         self.assertEqual(self.index.search("карбюратор веберовский", top_k=3), [])
-
-    def test_detect_lang(self):
-        self.assertEqual(detect_lang("уровень масла"), "ru")
-        self.assertEqual(detect_lang("oil level"), "en")
-        self.assertIsNone(detect_lang("123"))
 
 
 class TestCorpus(unittest.TestCase):
@@ -176,7 +227,7 @@ class TestCorpus(unittest.TestCase):
         cls.index = Bm25Index(cls.chunks, load_synonyms())
 
     def test_corpus_is_not_empty(self):
-        self.assertGreater(len(self.chunks), 500)
+        self.assertGreater(len(self.chunks), 1000)
 
     def test_every_chunk_can_be_cited(self):
         for chunk in self.chunks:
@@ -184,7 +235,7 @@ class TestCorpus(unittest.TestCase):
 
     def test_required_metadata(self):
         for chunk in self.chunks:
-            for field in ("id", "doc", "doc_title", "lang", "text"):
+            for field in ("id", "doc", "doc_title", "lang", "text", "unit_parts"):
                 self.assertIn(field, chunk)
             self.assertGreaterEqual(len(chunk["text"]), 40, chunk["id"])
 
@@ -194,7 +245,19 @@ class TestCorpus(unittest.TestCase):
 
     def test_all_expected_documents_are_indexed(self):
         docs = {chunk["doc"] for chunk in self.chunks}
-        self.assertEqual(docs, {"ru_owner", "en_owner", "wiring"})
+        self.assertEqual(docs, {"ru_owner", "en_owner", "service_manual", "wiring"})
+
+    def test_atomic_units_keep_their_title(self):
+        """Каждая часть единицы несёт её название — фрагмент без контекста
+        бесполезен и в выдаче, и в ссылке."""
+        multi = [c for c in self.chunks if c["unit_parts"] > 1 and c["doc"] != "wiring"]
+        self.assertGreater(len(multi), 100)
+        without_title = [c["id"] for c in multi if not c.get("section")]
+        self.assertLess(len(without_title) / len(multi), 0.05, without_title[:5])
+
+    def test_service_manual_pages_are_globally_numbered(self):
+        pages = [c["pdf_page"] for c in self.chunks if c["doc"] == "service_manual"]
+        self.assertGreater(max(pages), 3000, "нумерация должна быть сквозной по всему PDF")
 
 
 class TestRetrievalQuality(unittest.TestCase):
@@ -207,7 +270,7 @@ class TestRetrievalQuality(unittest.TestCase):
             cls.cases = [json.loads(line) for line in fh if line.strip()]
 
     def test_eval_set_is_meaningful(self):
-        self.assertGreaterEqual(len(self.cases), 15)
+        self.assertGreaterEqual(len(self.cases), 30)
 
     def test_every_query_hits_its_section(self):
         failures = []

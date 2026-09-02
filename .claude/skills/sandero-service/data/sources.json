@@ -25,23 +25,115 @@
       "indexed": true
     },
     {
+      "doc": "service_manual",
+      "title": "Renault Sandero II — сервисный мануал (Workshop Repair Manual 2012-2016, ENG)",
+      "type": "pdf",
+      "format": "service_manual",
+      "lang": "en",
+      "pages": 3508,
+      "indexed": true,
+      "note": "Исходный файл 83 МБ коннектор Google Drive не отдаёт и не разбирает целиком; владелец разбил его на 15 частей по 250 страниц. Номер страницы в цитатах — сквозной по исходному PDF. Практический предел выгрузки через коннектор около 6 МБ на файл: части 1, 10, 11 и 12 больше и пока не выгружены — их нужно скачать вручную, см. README.",
+      "parts": [
+        {
+          "part": 1,
+          "file": "pdf/2012-2016_RENAULT_Sandero_SM_compressed-1.pdf",
+          "drive_file_id": "1h-YXvnERXxvB5u7jBDOKaAPywML_WqwA",
+          "page_offset": 0
+        },
+        {
+          "part": 2,
+          "file": "pdf/2012-2016_RENAULT_Sandero_SM_compressed-2.pdf",
+          "drive_file_id": "1JiXQ3k_LsyQWN9LIDAs8JsKcoH5QGZol",
+          "page_offset": 250
+        },
+        {
+          "part": 3,
+          "file": "pdf/2012-2016_RENAULT_Sandero_SM_compressed-3.pdf",
+          "drive_file_id": "1vwin1FLNzLIRm5GFS--lIDGt7HcN8hzB",
+          "page_offset": 500
+        },
+        {
+          "part": 4,
+          "file": "pdf/2012-2016_RENAULT_Sandero_SM_compressed-4.pdf",
+          "drive_file_id": "1sNCLSJe19l95YfbqoykMaPCUb7IWNBjQ",
+          "page_offset": 750
+        },
+        {
+          "part": 5,
+          "file": "pdf/2012-2016_RENAULT_Sandero_SM_compressed-5.pdf",
+          "drive_file_id": "1-brx2uCFrmP3gXP1QSuNcoLUq3y-0ntj",
+          "page_offset": 1000
+        },
+        {
+          "part": 6,
+          "file": "pdf/2012-2016_RENAULT_Sandero_SM_compressed-6.pdf",
+          "drive_file_id": "12pYcgg-AEpua1C3x7bzRy1EQO1trxqt5",
+          "page_offset": 1250
+        },
+        {
+          "part": 7,
+          "file": "pdf/2012-2016_RENAULT_Sandero_SM_compressed-7.pdf",
+          "drive_file_id": "1xYQ6iuOnQZ-p-j_xuRuDuRRWZnXxq7kL",
+          "page_offset": 1500
+        },
+        {
+          "part": 8,
+          "file": "pdf/2012-2016_RENAULT_Sandero_SM_compressed-8.pdf",
+          "drive_file_id": "16bA4sAcEkfekLjdP9MqqgAC7eOOp0aFK",
+          "page_offset": 1750
+        },
+        {
+          "part": 9,
+          "file": "pdf/2012-2016_RENAULT_Sandero_SM_compressed-9.pdf",
+          "drive_file_id": "16hb7e_IiHHEca1lbINjbndssX_lxVfh7",
+          "page_offset": 2000
+        },
+        {
+          "part": 10,
+          "file": "pdf/2012-2016_RENAULT_Sandero_SM_compressed-10.pdf",
+          "drive_file_id": "1DN_AGWYGwiE6TG4eZXwxcATwpN5v-qlE",
+          "page_offset": 2250
+        },
+        {
+          "part": 11,
+          "file": "pdf/2012-2016_RENAULT_Sandero_SM_compressed-11.pdf",
+          "drive_file_id": "16SHzQhyLMl26vghBNI6nZXXxdeBNeLU7",
+          "page_offset": 2500
+        },
+        {
+          "part": 12,
+          "file": "pdf/2012-2016_RENAULT_Sandero_SM_compressed-12.pdf",
+          "drive_file_id": "16Hc8M95jT_8EMJSUgRXogCDWrW0OCVws",
+          "page_offset": 2750
+        },
+        {
+          "part": 13,
+          "file": "pdf/2012-2016_RENAULT_Sandero_SM_compressed-13.pdf",
+          "drive_file_id": "1sZ6G9smbnS4rXea_1Cb9-OXTDbjP_nv2",
+          "page_offset": 3000
+        },
+        {
+          "part": 14,
+          "file": "pdf/2012-2016_RENAULT_Sandero_SM_compressed-14.pdf",
+          "drive_file_id": "1MnOW4Bd-2ZbH4PA4OhsjWsTUSGkUfp8R",
+          "page_offset": 3250
+        },
+        {
+          "part": 15,
+          "file": "pdf/2012-2016_RENAULT_Sandero_SM_compressed-15.pdf",
+          "drive_file_id": "1D38R6pctFEpNu84Wh0EWi08Mm5tu3LPK",
+          "page_offset": 3500
+        }
+      ],
+      "indexed_parts_note": "11 из 15 частей; недостающие части выпадут из индекса без ошибки"
+    },
+    {
       "doc": "wiring",
       "title": "Renault Sandero II — электросхемы и монтажные блоки (иллюстрации)",
       "file": "img/",
       "type": "images",
       "lang": "ru",
       "indexed": true
-    },
-    {
-      "doc": "service_manual",
-      "title": "2012-2016 Renault Sandero Service Manual",
-      "drive_file_id": "1gvTef_EeHxHpKYUP8Q3EfJkEkGkJ91We",
-      "drive_title": "2012-2016_RENAULT_Sandero_SM.pdf",
-      "type": "pdf",
-      "lang": "en",
-      "size_mb": 83,
-      "indexed": false,
-      "reason": "скан без текстового слоя, 83 МБ — коннектор Google Drive не отдаёт файлы больше 10 МБ. Нужен OCR локально: см. README, раздел «Дополнить корпус»"
     },
     {
       "doc": "logan2",
