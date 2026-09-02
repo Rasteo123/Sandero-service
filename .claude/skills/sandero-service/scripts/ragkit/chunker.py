@@ -52,12 +52,25 @@ CHAPTERS_EN = {
 }
 
 
+# Текст предупреждения набран капсом и похож на заголовок, но им не является:
+# «ЗАПРЕЩЕНО УСТАНАВЛИВАТЬ ДЕТСКОЕ СИДЕНЬЕ…», «(1) СМЕРТЕЛЬНАЯ ОПАСНОСТЬ…».
+# Слова ищутся целиком: «БЕЗОПАСНОСТИ» не должно ловиться по «ОПАСНОСТИ».
+WARNING_WORD = re.compile(
+    r"(?<![А-ЯЁа-яё])(?:ОПАСНОСТ\w*|ЗАПРЕЩ\w*|СМЕРТЕЛЬН\w*|РИСК\w*|ТРАВМ\w*"
+    r"|ВНИМАНИЕ|DANGER|NEVER)(?![А-ЯЁа-яё])"
+)
+# Номер сноски в начале строки — признак вынесенного примечания, не заголовка.
+FOOTNOTE_PREFIX = re.compile(r"^\(\d+\)")
+
+
 def _looks_like_a_title(line: str) -> bool:
     """Отсеивает обрывки предупреждений и буквенные выноски («A B C D», «ЗАПРЕЩЕНА.»).
 
     Заголовок — это либо два и более значащих слова, либо одно длинное слово
     («ПРЕДОХРАНИТЕЛИ»), но не оборванная фраза с точкой или восклицанием.
     """
+    if WARNING_WORD.search(line) or FOOTNOTE_PREFIX.match(line) or "\u00ad" in line:
+        return False
     words = [w for w in re.split(r"[\s,]+", line) if len(w) >= 3 and any(c.isalpha() for c in w)]
     if len(words) >= 2:
         return True
@@ -185,6 +198,62 @@ CONTINUATION = re.compile(r"\s*\(\d{1,2}\s*/\s*\d{1,2}\)\s*$")
 def section_key(section: str) -> str:
     """«ЗАМЕНА КОЛЕСА (2/2)» -> «ЗАМЕНА КОЛЕСА»: продолжения — один раздел."""
     return CONTINUATION.sub("", section).strip()
+
+
+# Строка оглавления: «Ремни безопасности . . . . . . . 1.14»
+TOC_ENTRY = re.compile(r"^(.+?)[\s.]{4,}(\d{1,2}\.\d{1,3})\s*$")
+
+
+def parse_toc(pages: list[str]) -> dict[tuple[int, int], str]:
+    """Собирает оглавление руководства: метка страницы -> название раздела.
+
+    Нужно там, где типография не напечатала заголовок на самой странице
+    (например, страницы с таблицами крепления детских кресел): собственное
+    оглавление документа точнее любой догадки по тексту.
+    """
+    toc: dict[tuple[int, int], str] = {}
+    for raw in pages:
+        for line in raw.split("\n"):
+            match = TOC_ENTRY.match(line.strip())
+            if not match:
+                continue
+            title = match.group(1).strip(" .")
+            if len(title) < 5 or title.isdigit():
+                continue
+            chapter, page = match.group(2).split(".")
+            toc.setdefault((int(chapter), int(page)), title)
+    return toc
+
+
+def toc_lookup(toc: dict[tuple[int, int], str], label: str | None) -> str | None:
+    """Название раздела, начавшегося на этой странице или раньше в той же главе."""
+    if not label or "." not in label:
+        return None
+    try:
+        chapter, page = (int(part) for part in label.split(".", 1))
+    except ValueError:
+        return None
+    candidates = [key for key in toc if key[0] == chapter and key[1] <= page]
+    return toc[max(candidates)] if candidates else None
+
+
+def source_key(section_src: str) -> str:
+    """«Ceintures de sécurité (X52 - Dacia)» -> «Ceintures de sécurité»."""
+    return re.sub(r"\s*\([^)]*\)\s*$", "", section_src).strip()
+
+
+def best_title(candidates: list[str]) -> tuple[str | None, bool]:
+    """Название раздела из заголовков внутри единицы и признак его надёжности.
+
+    Руководство помечает продолжения раздела как «(1/7)» — такой заголовок
+    заведомо настоящий. Заголовок без метки может оказаться перенесённой
+    строкой предупреждения, поэтому оглавление документа для него надёжнее.
+    """
+    marked = [c for c in candidates if CONTINUATION.search(c)]
+    if marked:
+        return section_key(marked[0]), True
+    plain = [c for c in candidates if not c.rstrip().endswith(",")]
+    return (section_key(plain[0]) if plain else None), False
 
 
 def chunk_unit(text: str, *, target: int = 1300, overlap: int = 140) -> list[str]:

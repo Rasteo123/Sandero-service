@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections import Counter
 from pathlib import Path
@@ -28,12 +29,18 @@ from ragkit.chunker import (
     CHAPTERS_EN,
     CHAPTERS_RU,
     SM_TORQUE,
+    best_title,
     chunk_unit,
     parse_page,
     parse_service_page,
+    parse_toc,
     section_key,
+    source_key,
+    toc_lookup,
 )
 from ragkit.store import CHUNKS_PATH, CORPUS_DIR, DATA_DIR, SOURCES_PATH
+
+CYRILLIC = re.compile(r"[а-яё]", re.IGNORECASE)
 
 # Оглавления и алфавитный указатель только зашумляют выдачу.
 TOC_RATIO_SKIP = 0.5
@@ -58,11 +65,15 @@ def read_pdf(path: Path):
 def owner_units(source: dict, path: Path) -> list[dict]:
     """Руководство по эксплуатации: единица — раздел со всеми продолжениями.
 
-    Раздел печатается как «УРОВЕНЬ МОТОРНОГО МАСЛА: долив, заправка (1/4)» …
-    «(4/4)» на четырёх страницах подряд; для поиска это один смысловой кусок.
+    Границу задаёт идентификатор раздела из исходной вёрстки («Ceintures de
+    sécurité»), который типография оставила на каждой странице: он надёжнее
+    заголовков, потому что на страницах с одними таблицами (крепление детских
+    кресел) русского заголовка нет вовсе. Где такого идентификатора нет —
+    в английском руководстве его не печатали — граница берётся по заголовку.
     """
     chapters = CHAPTERS_RU if source.get("lang") == "ru" else CHAPTERS_EN
     pages, _ = read_pdf(path)
+    toc = parse_toc(pages)
     units: list[dict] = []
     current: dict | None = None
 
@@ -73,7 +84,8 @@ def owner_units(source: dict, path: Path) -> list[dict]:
         if page["toc_ratio"] >= TOC_RATIO_SKIP or page["chapter"] == INDEX_CHAPTER:
             continue
 
-        key = section_key(page["section"]) if page["section"] else None
+        source_id = source_key(page["section_src"]) if page["section_src"] else None
+        key = source_id or (section_key(page["section"]) if page["section"] else None)
         starts_new = current is None or (key is not None and key != current["key"])
         if starts_new:
             current = {
@@ -82,21 +94,33 @@ def owner_units(source: dict, path: Path) -> list[dict]:
                 "doc_title": source["title"],
                 "lang": source.get("lang", "ru"),
                 "kind": "manual",
-                "title": section_key(page["section"]) if page["section"] else None,
+                "titles": [],
                 "chapter": page["chapter"],
                 "chapter_title": chapters.get(page["chapter"] or -1),
                 "page_start": number,
                 "label_start": page["page_label"],
-                "system": page["section_src"],
+                "system": source_id,
                 "parts": [],
             }
             units.append(current)
+        if page["section"]:
+            current["titles"].append(page["section"])
         current["page_end"] = number
         current["label_end"] = page["page_label"] or current.get("label_end")
         current["parts"].append(page["text"])
 
     for unit in units:
         unit["text"] = "\n".join(unit.pop("parts"))
+        # Название берём русское, если типография его напечатала; иначе
+        # остаётся идентификатор раздела из вёрстки — он хотя бы точен.
+        title, reliable = best_title(unit.pop("titles"))
+        if not reliable:
+            # Заголовка с меткой продолжения нет: собственное оглавление
+            # документа надёжнее одиночной строки капсом, которая может
+            # оказаться переносом предупреждения.
+            title = toc_lookup(toc, unit.get("label_start")) or title
+        # Титульная страница и предисловие своего заголовка не имеют.
+        unit["title"] = title or unit["key"] or unit["chapter_title"] or chapters[0]
     return units
 
 
