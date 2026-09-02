@@ -49,10 +49,16 @@ def main() -> int:
     )
     parser.add_argument("query", nargs="*", help="запрос на русском или английском")
     parser.add_argument("-k", "--top", type=int, default=5, help="сколько фрагментов вернуть")
-    parser.add_argument("--doc", help="ограничить документом (ru_owner, en_owner, wiring)")
+    parser.add_argument(
+        "--doc", help="ограничить документом (ru_owner, en_owner, service_manual, wiring)"
+    )
     parser.add_argument("--lang", choices=["ru", "en"], help="ограничить языком")
     parser.add_argument("--chapter", type=int, help="ограничить главой руководства (1-6)")
-    parser.add_argument("--kind", choices=["manual", "image"], help="тип материала")
+    parser.add_argument(
+        "--kind",
+        choices=["manual", "service", "image"],
+        help="тип материала: руководство, ремонтная процедура, иллюстрация",
+    )
     parser.add_argument(
         "--per-doc", type=int, default=None, help="не более N фрагментов из одного документа"
     )
