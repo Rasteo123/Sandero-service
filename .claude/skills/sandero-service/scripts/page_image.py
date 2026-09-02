@@ -82,7 +82,14 @@ def page_for_label(doc: str, label: str) -> int:
 
 
 def render(
-    doc: str, page: int, sources: dict, *, dpi: int, out_dir: Path, fmt: str = "png"
+    doc: str,
+    page: int,
+    sources: dict,
+    *,
+    dpi: int,
+    out_dir: Path,
+    fmt: str = "png",
+    gray: bool = False,
 ) -> Path:
     suffix = "jpg" if fmt == "jpg" else "png"
     name = f"p{page:04d}.{suffix}" if out_dir == PAGES_DIR else f"p{page:04d}-{dpi}dpi.{suffix}"
@@ -103,10 +110,13 @@ def render(
     with pymupdf.open(str(path)) as document:
         if not 1 <= local <= document.page_count:
             raise SystemExit(f"В {path.name} нет страницы {local}")
-        pixmap = document[local - 1].get_pixmap(dpi=dpi)
+        colorspace = pymupdf.csGRAY if gray else pymupdf.csRGB
+        pixmap = document[local - 1].get_pixmap(dpi=dpi, colorspace=colorspace)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_bytes(
-        pixmap.tobytes("jpg", jpg_quality=80) if fmt == "jpg" else pixmap.tobytes("png")
+        pixmap.tobytes("jpg", jpg_quality=70 if gray else 80)
+        if fmt == "jpg"
+        else pixmap.tobytes("png")
     )
     return out_path
 
@@ -206,6 +216,9 @@ def main() -> int:
     parser.add_argument("--label", help="метка бумажной страницы, например 4.7")
     parser.add_argument("--dpi", type=int, default=140, help="разрешение (по умолчанию 140)")
     parser.add_argument(
+        "--gray", action="store_true", help="в оттенках серого: чертежи не теряют, вес вдвое меньше"
+    )
+    parser.add_argument(
         "--preset",
         choices=sorted(PRESETS),
         help="отрисовать набор, который идёт вместе со скиллом",
@@ -227,14 +240,20 @@ def main() -> int:
                 else pages_with_figures(doc, sources, selector)
             )
             for page in pages_to_draw:
-                print(render(doc, page, sources, dpi=args.dpi, out_dir=out_dir, fmt=fmt))
+                print(
+                    render(
+                        doc, page, sources, dpi=args.dpi, out_dir=out_dir, fmt=fmt, gray=args.gray
+                    )
+                )
         return 0
 
     if not pages:
         parser.error("укажите номера страниц, --label или --preset")
 
     for page in pages:
-        print(render(args.doc, page, sources, dpi=args.dpi, out_dir=out_dir, fmt=fmt))
+        print(
+            render(args.doc, page, sources, dpi=args.dpi, out_dir=out_dir, fmt=fmt, gray=args.gray)
+        )
     return 0
 
 
