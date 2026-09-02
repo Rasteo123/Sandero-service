@@ -274,6 +274,7 @@ class Bm25Index:
         *,
         where: dict[str, object] | None = None,
         per_doc: int | None = None,
+        engine: str | None = None,
     ) -> list[Hit]:
         concepts = self.expand(query)
         if not concepts:
@@ -309,7 +310,7 @@ class Bm25Index:
         hits = [
             Hit(chunk=self.chunks[idx], score=score, matched=sorted(matched[idx]))
             for idx, score in scores.items()
-            if self._passes(self.chunks[idx], where)
+            if self._passes(self.chunks[idx], where) and self._fits_engine(self.chunks[idx], engine)
         ]
         hits.sort(key=lambda h: h.score, reverse=True)
         if per_doc:
@@ -328,6 +329,16 @@ class Bm25Index:
             if (first, second) in adjacent:
                 bonus += PHRASE_BONUS * (self._idf(first) + self._idf(second)) / 2
         return bonus
+
+    @staticmethod
+    def _fits_engine(chunk: dict, engine: str | None) -> bool:
+        """Фрагмент, помеченный другим двигателем, не годится.
+
+        Метка есть не у всех: схема кузова к мотору не привязана. Отсекаются
+        только те фрагменты, про которые известно, что они про чужой двигатель.
+        """
+        engines = chunk.get("engines")
+        return not (engine and engines) or engine in engines
 
     @staticmethod
     def _passes(chunk: dict, where: dict[str, object] | None) -> bool:

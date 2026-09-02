@@ -173,6 +173,14 @@ class TestBm25(unittest.TestCase):
             "id": "c", "doc": "en_owner", "lang": "en", "section": "TYRE PRESSURE",
             "text": "Check the tyre pressure when the tyres are cold.",
         },
+        {
+            "id": "d", "doc": "wiring", "lang": "ru", "section": "Схема двигателя 8V",
+            "engines": ["K7M"], "text": "Схема жгута проводов двигателя, распиновка ЭБУ.",
+        },
+        {
+            "id": "e", "doc": "wiring", "lang": "ru", "section": "Схема двигателя 16V",
+            "engines": ["K4M"], "text": "Схема жгута проводов двигателя, распиновка ЭБУ.",
+        },
     ]
     SYNONYMS = {
         "замена": ["removal", "replaced"],
@@ -212,6 +220,16 @@ class TestBm25(unittest.TestCase):
         hits = self.index.search("clutch tyre колеса", top_k=5, per_doc=1)
         docs = [hit.chunk["doc"] for hit in hits]
         self.assertEqual(len(docs), len(set(docs)))
+
+    def test_chunk_of_another_engine_is_skipped(self):
+        ids = {h.chunk["id"] for h in self.index.search("распиновка ЭБУ", top_k=5, engine="K7M")}
+        self.assertIn("d", ids)
+        self.assertNotIn("e", ids, "схема 16V не относится к K7M")
+
+    def test_untagged_chunks_survive_the_engine_filter(self):
+        """Метка есть не у всех: схема кузова к мотору не привязана."""
+        ids = {h.chunk["id"] for h in self.index.search("tyre pressure", top_k=5, engine="K7M")}
+        self.assertIn("c", ids)
 
     def test_typo_is_recovered_by_trigrams(self):
         self.assertEqual(self.index.search("сцеплени", top_k=1)[0].chunk["id"], "b")
@@ -256,6 +274,12 @@ class TestCorpus(unittest.TestCase):
         self.assertGreater(len(multi), 100)
         without_title = [c["id"] for c in multi if not c.get("section")]
         self.assertLess(len(without_title) / len(multi), 0.05, without_title[:5])
+
+    def test_engine_specific_diagrams_are_tagged(self):
+        """Схемы 8V и 16V — это K7M и K4M: без метки поиск смешал бы их."""
+        tagged = {c["image"]: c["engines"] for c in self.chunks if c.get("engines")}
+        self.assertEqual(tagged.get("13.jpg"), ["K7M"])
+        self.assertEqual(tagged.get("21.jpg"), ["K4M"])
 
     def test_service_manual_pages_are_globally_numbered(self):
         pages = [c["pdf_page"] for c in self.chunks if c["doc"] == "service_manual"]
@@ -303,6 +327,16 @@ class TestApplicability(unittest.TestCase):
         self.assertIsNone(result["allowed"])
         self.assertEqual(restrict({"lang": "ru"}, result), {"lang": "ru"})
 
+    def test_profile_engine_is_applied_without_a_code_in_the_query(self):
+        profile = (self.vehicle.get("profile") or {}).get("engine")
+        self.assertTrue(profile, "профиль автомобиля должен быть заполнен")
+        result = check_applicability("распиновка ЭБУ", self.vehicle, profile_engine=profile)
+        self.assertEqual(result["engine"], profile)
+
+    def test_engine_named_in_the_query_overrides_the_profile(self):
+        result = check_applicability("распиновка ЭБУ K4M", self.vehicle, profile_engine="K7M")
+        self.assertEqual(result["engine"], "K4M")
+
     def test_restrict_intersects_with_requested_doc(self):
         result = check_applicability("цепь ГРМ H4M", self.vehicle)
         self.assertEqual(restrict({"doc": "service_manual"}, result)["doc"], [])
@@ -328,8 +362,14 @@ class TestRetrievalQuality(unittest.TestCase):
 
     def _search(self, case):
         """Ищет так же, как CLI: с проверкой применимости к двигателю."""
-        where = restrict(case.get("filters"), check_applicability(case["query"], self.vehicle))
-        return self.index.search(case["query"], top_k=case.get("top_k", 5), where=where)
+        applicability = check_applicability(case["query"], self.vehicle)
+        where = restrict(case.get("filters"), applicability)
+        return self.index.search(
+            case["query"],
+            top_k=case.get("top_k", 5),
+            where=where,
+            engine=applicability["engine"],
+        )
 
     def test_every_query_hits_its_section(self):
         failures = []

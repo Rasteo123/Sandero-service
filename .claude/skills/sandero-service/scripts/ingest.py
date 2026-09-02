@@ -192,6 +192,7 @@ def image_units(images_path: Path) -> list[dict]:
             "image": item["file"],
             "drive_url": item.get("drive_url"),
             "labels": item.get("labels"),
+            "engines": item.get("engines"),
             "text": item.get("description", ""),
         }
         for item in payload["images"]
@@ -226,6 +227,7 @@ def units_to_records(units: list[dict]) -> list[dict]:
                 ("image", "image"),
                 ("drive_url", "drive_url"),
                 ("labels", "labels"),
+                ("engines", "engines"),
             ):
                 if unit.get(key) is not None:
                     record[field] = unit[key]

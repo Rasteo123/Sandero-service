@@ -126,7 +126,13 @@ def main() -> int:
         # красивая процедура от другого мотора хуже, чем её отсутствие.
         where = restrict_to_applicable(where, applicability) or {}
 
-    hits = index.search(query, top_k=args.top, where=where or None, per_doc=args.per_doc)
+    hits = index.search(
+        query,
+        top_k=args.top,
+        where=where or None,
+        per_doc=args.per_doc,
+        engine=applicability["engine"],
+    )
 
     if args.json:
         print(
