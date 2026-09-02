@@ -32,3 +32,6 @@
 {"query": "снятие вакуумного усилителя тормозов", "expect_any": ["BRAKE SERVO"]}
 {"query": "снятие и установка стартера", "expect_any": ["STARTER REMOVAL"]}
 {"query": "меры предосторожности ABS", "expect_any": ["ABS PRECAUTIONS"]}
+{"query": "прокачка гидроусилителя руля", "expect_any": ["POWER-ASSISTED STEERING CIRCUIT BLEEDING"]}
+{"query": "снятие задней балки", "expect_any": ["REAR AXLE"]}
+{"query": "снятие радиатора охлаждения", "expect_any": ["COOLING RADIATOR"]}
