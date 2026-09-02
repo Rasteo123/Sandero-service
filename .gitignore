@@ -9,7 +9,3 @@ __pycache__/
 # Страницы, отрисованные по требованию (scripts/page_image.py)
 .claude/skills/sandero-service/assets/cache/
 
-# Страницы сервисного мануала, отрисованные пресетом repair: 670 файлов и
-# ~38 МБ. В репозитории им не место — набор собирается командой
-# scripts/page_image.py service_manual --preset repair --dpi 90
-.claude/skills/sandero-service/assets/pages/service_manual/
