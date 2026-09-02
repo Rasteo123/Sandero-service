@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -129,12 +130,72 @@ def pages_with_figures(doc: str, sources: dict, chapters: tuple[int, ...] | None
         return [p for p in range(first, last + 1) if pdf[p - 1].get_images()]
 
 
+# Процедуры, которые делают руками: механика, тормоза, трансмиссия, ходовая,
+# топливо и зажигание, электрика.
+REPAIR_TOPICS = re.compile(
+    r"\bOIL\b|FILTER|COOLANT|COOLING|SPARK|MAINTENANCE|DRAIN|THERMOSTAT|WATER PUMP|EXPANSION"
+    r"|BRAKE|CALLIPER|BLEED|HANDBRAKE|MASTER CYLINDER|ABS"
+    r"|CLUTCH|GEARBOX|GEAR |SELECTOR|DIFFERENTIAL|SYNCHRO"
+    r"|\bBELT\b|ROLLER|PULLEY|ALTERNATOR|STARTER|TENSION"
+    r"|SUSPENSION|SHOCK ABSORBER|SPRING|LOWER ARM|BALL JOINT|\bHUB\b|BEARING|DRIVESHAFT"
+    r"|STEERING|TRACK ROD|\bAXLE\b|\bWHEEL\b|TYRE"
+    r"|FUEL|INJECT|IGNITION|COIL|SENSOR|THROTTLE|IDLE|CANISTER|EXHAUST|CATALYTIC|MANIFOLD"
+    r"|BATTERY|FUSE|RELAY|HEADLIGHT|\bLIGHT\b|LAMP|WIPER|HORN|COMPUTER",
+    re.IGNORECASE,
+)
+# Кузовной ремонт, окраска, антикор, обшивка и дизель: для бензинового
+# автомобиля это лишний вес, а весит оно много.
+REPAIR_SKIP = re.compile(
+    r"PAINT|BODYWORK|WELDING|MASKING|PRIMER|SEALING|ANTICORROSION|ANTI-CORROSION|ADHESIVE"
+    r"|PANEL|PILLAR|SILL|ROOF|FLOOR|CROSS MEMBER|SIDE MEMBER|DIESEL|GPL|PROTECTION|TRIM"
+    r"|CARPET|UPHOLSTER|REPLACEMENT OF",
+    re.IGNORECASE,
+)
+# Доля площади листа под рисунками, ниже которой страницу рисовать незачем:
+# лист с одними предупреждениями и моментами затяжки уже есть в корпусе текстом.
+FIGURE_AREA = 0.08
+
+
+def repair_pages(sources: dict) -> list[int]:
+    """Страницы сервисного мануала с рисунками по темам, нужным при ремонте."""
+    import pymupdf
+
+    document = next(d for d in sources["documents"] if d["doc"] == "service_manual")
+    parts = sorted(document["parts"], key=lambda part: part["page_offset"])
+    wanted: set[int] = set()
+    for chunk in load_chunks():
+        if chunk["doc"] != "service_manual":
+            continue
+        title = chunk.get("section") or ""
+        if REPAIR_SKIP.search(title) or not REPAIR_TOPICS.search(title):
+            continue
+        end = chunk.get("pdf_page_end") or chunk["pdf_page"]
+        wanted.update(range(chunk["pdf_page"], end + 1))
+
+    opened: dict[str, object] = {}
+    selected = []
+    for page in sorted(wanted):
+        path, local = locate("service_manual", page, sources)
+        pdf = opened.setdefault(str(path), pymupdf.open(str(path)))
+        sheet = pdf[local - 1]
+        area = abs(sheet.rect)
+        covered = sum(
+            abs(sheet.get_image_bbox(image))
+            for image in sheet.get_images(full=True)
+            if sheet.get_image_bbox(image)
+        )
+        if area and covered / area > FIGURE_AREA:
+            selected.append(page)
+    for pdf in opened.values():
+        pdf.close()
+    return selected
+
+
 # Наборы страниц, которые имеет смысл отрисовать заранее и положить в скилл.
-# Сервисного мануала здесь нет намеренно: 3170 страниц с рисунками — это
-# больше 200 МБ, их рендерим по требованию.
 PRESETS = {
     "maintenance": [("ru_owner", (4, 5))],
     "owner": [("ru_owner", None), ("en_owner", None)],
+    "repair": [("service_manual", "repair")],
 }
 
 
@@ -160,8 +221,12 @@ def main() -> int:
     out_dir = args.out
     if args.preset:
         out_dir, fmt = PAGES_DIR, "jpg"
-        for doc, chapters in PRESETS[args.preset]:
-            for page in pages_with_figures(doc, sources, chapters):
+        for doc, selector in PRESETS[args.preset]:
+            pages_to_draw = (
+                repair_pages(sources) if selector == "repair"
+                else pages_with_figures(doc, sources, selector)
+            )
+            for page in pages_to_draw:
                 print(render(doc, page, sources, dpi=args.dpi, out_dir=out_dir, fmt=fmt))
         return 0
 
