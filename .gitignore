@@ -1,0 +1,7 @@
+# Исходники с Google Диска: большие бинарники, восстанавливаются
+# через .claude/skills/sandero-service/scripts/drive_import.py
+corpus/
+
+.venv/
+__pycache__/
+*.py[cod]

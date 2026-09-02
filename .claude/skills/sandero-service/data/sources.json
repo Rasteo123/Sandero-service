@@ -1,0 +1,58 @@
+{
+  "vehicle": "Renault Sandero II (X52 Ph2) / Sandero Stepway II, 2014+",
+  "note": "fileId — идентификаторы на Google Диске владельца. Бинарники в git не хранятся, см. scripts/drive_import.py",
+  "documents": [
+    {
+      "doc": "ru_owner",
+      "title": "Renault Sandero — руководство по эксплуатации (NU1232-8, RUS)",
+      "file": "pdf/sandero_ru_owner_manual.pdf",
+      "drive_file_id": "1yr59UzNYB4RI4MEkGf5NN2uE_8Ocq-wU",
+      "drive_title": "Сандеро.pdf",
+      "type": "pdf",
+      "lang": "ru",
+      "pages": 300,
+      "indexed": true
+    },
+    {
+      "doc": "en_owner",
+      "title": "Renault Sandero II — driver's handbook (993-8, ENG)",
+      "file": "pdf/sandero2_993-8_eng.pdf",
+      "drive_file_id": "1ykYCXrzXfdgWs09N8E2jpWvRmsnkeffL",
+      "drive_title": "Sandero_2_-_993-8_ENG_копия.pdf",
+      "type": "pdf",
+      "lang": "en",
+      "pages": 262,
+      "indexed": true
+    },
+    {
+      "doc": "wiring",
+      "title": "Renault Sandero II — электросхемы и монтажные блоки (иллюстрации)",
+      "file": "img/",
+      "type": "images",
+      "lang": "ru",
+      "indexed": true
+    },
+    {
+      "doc": "service_manual",
+      "title": "2012-2016 Renault Sandero Service Manual",
+      "drive_file_id": "1gvTef_EeHxHpKYUP8Q3EfJkEkGkJ91We",
+      "drive_title": "2012-2016_RENAULT_Sandero_SM.pdf",
+      "type": "pdf",
+      "lang": "en",
+      "size_mb": 83,
+      "indexed": false,
+      "reason": "скан без текстового слоя, 83 МБ — коннектор Google Drive не отдаёт файлы больше 10 МБ. Нужен OCR локально: см. README, раздел «Дополнить корпус»"
+    },
+    {
+      "doc": "logan2",
+      "title": "Renault Logan II — руководство по ремонту (платформенный близнец Sandero II)",
+      "drive_file_id": "1_N9I-ngTgKb9KsKoBooXcNFdE54jmywu",
+      "drive_title": "Renault LOGAN II.pdf",
+      "type": "pdf",
+      "lang": "ru",
+      "size_mb": 87,
+      "indexed": false,
+      "reason": "скан без текстового слоя, 87 МБ — те же ограничения, что у service_manual"
+    }
+  ]
+}
