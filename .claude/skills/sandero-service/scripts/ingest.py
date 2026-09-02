@@ -264,13 +264,17 @@ def main() -> int:
 
         found = units_to_records(units)
         records.extend(found)
-        print(f"{source['doc']}: {len(units)} единиц -> {len(found)} чанков")
+        # Считаем единицы, из которых реально вышли чанки: короткие остатки
+        # вёрстки отсеиваются, и печатать их как содержимое корпуса нечестно.
+        indexed = len({record["id"].rsplit(":", 1)[0] for record in found})
+        print(f"{source['doc']}: {indexed} единиц -> {len(found)} чанков")
 
     images = image_units(DATA_DIR / "images.json")
     if images:
         found = units_to_records(images)
         records.extend(found)
-        print(f"иллюстрации: {len(images)} единиц -> {len(found)} чанков")
+        indexed = len({record["id"].rsplit(":", 1)[0] for record in found})
+        print(f"иллюстрации: {indexed} единиц -> {len(found)} чанков")
 
     if not records:
         raise SystemExit("Нечего индексировать. Восстановите исходники: scripts/drive_import.py")

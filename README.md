@@ -12,7 +12,7 @@ $ python3 .claude/skills/sandero-service/scripts/search.py "прокачка т�
 
 [1] Renault Sandero II — сервисный мануал (Workshop Repair Manual 2012-2016, ENG) —
     BRAKING CIRCUIT BLEED — PDF-стр. 253-257 — фрагмент 3 из 4
-    id=service_manual:u2:2  score=17.35
+    id=service_manual:u58:2  score=16.85
    … Fit the bleed containers to the six bleed screws of the callipers. Undo the
    calliper bleed screws: front left-hand, front right-hand, rear left-hand, rear
    right-hand. Open the circuit between the bleed screw and brake fluid reservoir
@@ -48,7 +48,7 @@ tests/                    38 тестов и эвал-набор из 40 зап�
 
 | Документ | Объём | В индексе |
 |---|---|---|
-| `Сандеро.pdf` — руководство по эксплуатации, RUS (NU1232-8) | 300 стр. | ✓ 115 разделов / 315 фрагментов |
+| `Сандеро.pdf` — руководство по эксплуатации, RUS (NU1232-8) | 300 стр. | ✓ 110 разделов / 315 фрагментов |
 | `Sandero_2_-_993-8_ENG_копия.pdf` — driver's handbook | 262 стр. | ✓ 97 разделов / 254 фрагмента |
 | `2012-2016_RENAULT_Sandero_SM.pdf` — заводской сервисный мануал | 3508 стр. | ✓ 525 процедур / 1588 фрагментов (целиком) |
 | 22 иллюстрации `1.jpg`-`22.jpg` — электросхемы, монтажные блоки | — | ✓ 22 единицы / 24 фрагмента |
